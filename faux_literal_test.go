@@ -45,7 +45,15 @@ func (trru testRuneRawUnmarshaler) assert(t *testing.T) bool {
 	return assert.Equal(t, rune(1), rune(trru))
 }
 
-// TODO: testFauxLiteralErrors
+func testFauxLiteralErrors(t *testing.T, level qry.DecodeLevel) {
+	t.Run("unescape", func(t *testing.T) {
+		t.Skip("TODO: converter.Unescape error")
+	})
+
+	t.Run("too small", func(t *testing.T) {
+		t.Skip("TODO: insufficient target length error")
+	})
+}
 
 func testFauxLiterals(t *testing.T, level qry.DecodeLevel) {
 	var (
@@ -53,7 +61,7 @@ func testFauxLiterals(t *testing.T, level qry.DecodeLevel) {
 		unescapedInput = "abc xyz"
 
 		base = newTest(
-			configOptionsAs(qry.SetOptionsAs(level, qry.SetAllowLiteral)),
+			configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 			decodeLevelAs(level),
 			inputAs(rawInput),
 		)

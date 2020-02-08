@@ -41,7 +41,7 @@ func (tcs TestCustomString) assert(t *testing.T, expected string) bool {
 func (tu *TestUnmarshaler) UnmarshalText(text []byte) error        { return tu.doUnmarshal(text) }
 func (tru *TestRawUnmarshaler) UnmarshalRawText(text []byte) error { return tru.doUnmarshal(text) }
 
-type testTrace struct{ *qry.TreeTrace }
+type testTrace struct{ *qry.TraceTree }
 
 func (tt testTrace) log(t *testing.T) {
 	if testing.Verbose() {
@@ -91,7 +91,7 @@ func (dt decodeTest) with(opts ...testOpt) decodeTest {
 func (dt decodeTest) assert(t *testing.T, out interface{}) (testTrace, bool) {
 	var (
 		decoder = qry.NewDecoder(dt.configOpts...)
-		trace   = testTrace{qry.NewTreeTrace()}
+		trace   = testTrace{qry.NewTraceTree()}
 	)
 
 	actualErr := decoder.Decode(dt.decodeLevel, dt.input, out, trace)

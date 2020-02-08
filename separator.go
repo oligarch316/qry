@@ -2,8 +2,8 @@ package qry
 
 import "strings"
 
-// SeparatorConfig TODO
-type SeparatorConfig struct {
+// ConfigSeparate TODO
+type ConfigSeparate struct {
 	Fields, Values func(string) []string
 	KeyVals        func(string) (string, string)
 }

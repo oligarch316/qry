@@ -99,7 +99,7 @@ func (dl DecodeLevel) newInternalError(msg string, input string, target reflect.
 
 // Decoder TODO
 type Decoder struct {
-	separators SeparatorConfig
+	separators ConfigSeparate
 	baseModes  levelModes
 	logTrace   Trace
 
@@ -170,6 +170,7 @@ func (d *Decoder) decode(level DecodeLevel, raw string, val reflect.Value, state
 		return level.newError("non-settable target", raw, val)
 	}
 
+	// TODO: Break this out and remove the decodeHandler type (unnecessary slice creation)
 	for _, handler := range []decodeHandler{
 		d.handleIndirects,
 		d.handleLiterals,
@@ -184,11 +185,11 @@ func (d *Decoder) decode(level DecodeLevel, raw string, val reflect.Value, state
 }
 
 func (d *Decoder) handleIndirects(level DecodeLevel, raw string, val reflect.Value, state *decodeState) (bool, error) {
-	replaceMode := state.modes[level].ReplaceIndirect
+	shouldReplace := state.modes[level].ReplaceIndirect || val.IsZero()
 
 	switch val.Kind() {
 	case reflect.Ptr:
-		if replaceMode || val.IsZero() {
+		if shouldReplace {
 			elemType := val.Type().Elem()
 			val.Set(reflect.New(elemType))
 		}
@@ -196,7 +197,7 @@ func (d *Decoder) handleIndirects(level DecodeLevel, raw string, val reflect.Val
 		return true, d.decode(level, raw, val.Elem(), state.child())
 
 	case reflect.Interface:
-		if replaceMode || val.IsZero() {
+		if shouldReplace {
 			// Create new item of default type for level, process and set
 			newItem := level.newDefault()
 			if err := d.decode(level, raw, newItem, state.child()); err != nil {
@@ -243,8 +244,8 @@ func (d *Decoder) handleLiterals(level DecodeLevel, raw string, val reflect.Valu
 		}
 	}
 
+	// Disregard literal kinds unless allowed
 	if !state.modes[level].AllowLiteral {
-		// Disregard literal kinds unless allowed
 		return false, nil
 	}
 
@@ -326,34 +327,40 @@ func (d *Decoder) handleFauxLiterals(level DecodeLevel, raw string, val reflect.
 }
 
 func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Value, state *decodeState) (bool, error) {
-	switch level {
-	case LevelQuery:
-		return d.handleQueryContainers(raw, val, state)
-	case LevelField:
-		return d.handleFieldContainers(raw, val, state)
-	case LevelValueList:
-		return d.handleValueListContainers(raw, val, state)
-	}
-
-	// LevelKey and LevelValue do not support container kinds
-	return false, nil
-}
-
-func (d *Decoder) handleQueryContainers(raw string, val reflect.Value, state *decodeState) (bool, error) {
-	replaceMode := state.modes[LevelQuery].ReplaceContainer
+	shouldReplace := state.modes[level].ReplaceContainer || val.IsZero()
 
 	switch val.Kind() {
 	case reflect.Slice:
-		elemType := val.Type().Elem()
-		newSlice := reflect.MakeSlice(reflect.SliceOf(elemType), val.Len(), val.Cap())
+		var (
+			childLevel DecodeLevel
+			rawItems   []string
+		)
 
-		if !replaceMode {
+		switch level {
+		case LevelQuery:
+			childLevel, rawItems = LevelField, d.separators.Fields(raw)
+		case LevelValueList:
+			childLevel, rawItems = LevelValue, d.separators.Values(raw)
+		default:
+			// Only query and value list levels support slices
+			return false, nil
+		}
+
+		var (
+			elemType = val.Type().Elem()
+			newSlice reflect.Value
+		)
+
+		if shouldReplace {
+			newSlice = reflect.MakeSlice(reflect.SliceOf(elemType), 0, val.Cap())
+		} else {
+			newSlice = reflect.MakeSlice(reflect.SliceOf(elemType), val.Len(), val.Cap())
 			reflect.Copy(newSlice, val)
 		}
 
-		for _, rawField := range d.separators.Fields(raw) {
+		for _, rawItem := range rawItems {
 			newElem := reflect.New(elemType).Elem()
-			if err := d.decode(LevelField, rawField, newElem, state.child()); err != nil {
+			if err := d.decode(childLevel, rawItem, newElem, state.child()); err != nil {
 				return true, err
 			}
 			newSlice = reflect.Append(newSlice, newElem)
@@ -362,27 +369,101 @@ func (d *Decoder) handleQueryContainers(raw string, val reflect.Value, state *de
 		val.Set(newSlice)
 		return true, nil
 
-		// case reflect.Array:
-		// TODO
+	case reflect.Array:
+		var (
+			childLevel DecodeLevel
+			rawItems   []string
+		)
 
-		// case reflect.Map:
-		// TODO
+		switch level {
+		case LevelQuery:
+			childLevel, rawItems = LevelField, d.separators.Fields(raw)
+		case LevelValueList:
+			childLevel, rawItems = LevelValue, d.separators.Values(raw)
+		default:
+			// Only query and value list levels support arrays
+			return false, nil
+		}
 
-		// case reflect.Struct:
+		if val.Len() < len(rawItems) {
+			return true, level.newError("insufficient target length", raw, val)
+		}
+
+		newArray := reflect.New(val.Type()).Elem()
+
+		for i, rawItem := range rawItems {
+			if err := d.decode(childLevel, rawItem, newArray.Index(i), state); err != nil {
+				return true, err
+			}
+		}
+
+		val.Set(newArray)
+		return true, nil
+
+	case reflect.Map:
+		// TODO: Any way to make all the shouldReplace checks more elegant?
+
+		var rawFields []string
+
+		switch level {
+		case LevelQuery:
+			rawFields = d.separators.Fields(raw)
+		case LevelField:
+			rawFields = []string{raw}
+		default:
+			// Only query and field levels support maps
+			return false, nil
+		}
+
+		var (
+			dstMap   reflect.Value
+			keyType  = val.Type().Key()
+			elemType = val.Type().Elem()
+		)
+
+		if shouldReplace {
+			dstMap = reflect.MakeMap(val.Type())
+		} else {
+			dstMap = val
+		}
+
+		for _, rawField := range rawFields {
+			var (
+				newKey               = reflect.New(keyType).Elem()
+				rawKey, rawValueList = d.separators.KeyVals(rawField)
+			)
+
+			if err := d.decode(LevelKey, rawKey, newKey, state.child()); err != nil {
+				return true, err
+			}
+
+			if !shouldReplace {
+				// NOTE: Same general note as seen in handleIndirects where kind == reflect.Interface
+				if elem := dstMap.MapIndex(newKey); elem.IsValid() && elem.Kind() == reflect.Ptr && !elem.IsNil() {
+					if err := d.decode(LevelValueList, rawValueList, elem.Elem(), state.child()); err != nil {
+						return true, err
+					}
+					continue
+				}
+			}
+
+			newElem := reflect.New(elemType).Elem()
+			if err := d.decode(LevelValueList, rawValueList, newElem, state.child()); err != nil {
+				return true, err
+			}
+
+			dstMap.SetMapIndex(newKey, newElem)
+		}
+
+		if shouldReplace {
+			val.Set(dstMap)
+		}
+
+		return true, nil
+
+	case reflect.Struct:
 		// TODO
 	}
-
-	return false, nil
-}
-
-func (d *Decoder) handleFieldContainers(raw string, val reflect.Value, state *decodeState) (bool, error) {
-	// TODO: Slices, Arrays, Maps and Structs
-
-	return false, nil
-}
-
-func (d *Decoder) handleValueListContainers(raw string, val reflect.Value, state *decodeState) (bool, error) {
-	// TODO: Slices and Arrays
 
 	return false, nil
 }

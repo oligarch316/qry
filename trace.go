@@ -19,7 +19,7 @@ func mergeTraces(traces []Trace) Trace {
 	switch len(traces) {
 	case 0:
 		// No-op
-		return MarkTrace(func(DecodeLevel, string, reflect.Value) {})
+		return TraceMarker(func(DecodeLevel, string, reflect.Value) {})
 	case 1:
 		return traces[0]
 	}
@@ -46,45 +46,46 @@ func (tl TraceList) Child() Trace {
 	return res
 }
 
-// MarkTrace TODO
-type MarkTrace func(DecodeLevel, string, reflect.Value)
+// TraceMarker TODO
+type TraceMarker func(DecodeLevel, string, reflect.Value)
 
 // Mark TODO
-func (mt MarkTrace) Mark(level DecodeLevel, input string, target reflect.Value) {
-	mt(level, input, target)
+func (tm TraceMarker) Mark(level DecodeLevel, input string, target reflect.Value) {
+	tm(level, input, target)
 }
 
 // Child TODO
-func (mt MarkTrace) Child() Trace { return mt }
+func (tm TraceMarker) Child() Trace { return tm }
 
-// TreeTrace TODO
-type TreeTrace struct{ TreeTraceNode }
+// TraceTree TODO
+type TraceTree struct{ TraceTreeNode }
 
-// NewTreeTrace TODO
-func NewTreeTrace() *TreeTrace { return new(TreeTrace) }
+// NewTraceTree TODO
+func NewTraceTree() *TraceTree { return new(TraceTree) }
 
-func (tt *TreeTrace) String() string {
+func (tt *TraceTree) String() string {
 	if tt.Input == "" {
 		return "trace tree"
 	}
 
-	return fmt.Sprintf("trace tree: %s", tt.TreeTraceNode.String())
+	return fmt.Sprintf("trace tree: %s", tt.TraceTreeNode.String())
 }
 
 // Dump TODO
-func (tt TreeTrace) Dump() { tt.Fdump(os.Stdout) }
+func (tt TraceTree) Dump() { tt.Fdump(os.Stdout) }
 
 // Fdump TODO
-func (tt TreeTrace) Fdump(w io.Writer) { dumpTree(w, LevelQuery, &tt.TreeTraceNode) }
+func (tt TraceTree) Fdump(w io.Writer) { dumpTree(w, LevelQuery, &tt.TraceTreeNode) }
 
 // Sdump TODO
-func (tt TreeTrace) Sdump() string {
+func (tt TraceTree) Sdump() string {
 	var buf bytes.Buffer
 	tt.Fdump(&buf)
 	return buf.String()
 }
 
-func dumpTree(w io.Writer, parentLevel DecodeLevel, node *TreeTraceNode) {
+// TODO: this is wrong!
+func dumpTree(w io.Writer, parentLevel DecodeLevel, node *TraceTreeNode) {
 	adjLevel := node.Level
 	if adjLevel >= LevelValueList {
 		adjLevel--
@@ -106,20 +107,20 @@ func dumpTree(w io.Writer, parentLevel DecodeLevel, node *TreeTraceNode) {
 	}
 }
 
-// TreeTraceNode TODO
-type TreeTraceNode struct {
+// TraceTreeNode TODO
+type TraceTreeNode struct {
 	DecodeInfo
-	Children []*TreeTraceNode
+	Children []*TraceTreeNode
 }
 
 // Mark TODO
-func (ttn *TreeTraceNode) Mark(level DecodeLevel, input string, target reflect.Value) {
+func (ttn *TraceTreeNode) Mark(level DecodeLevel, input string, target reflect.Value) {
 	ttn.DecodeInfo = level.newInfo(input, target)
 }
 
 // Child TODO
-func (ttn *TreeTraceNode) Child() Trace {
-	res := new(TreeTraceNode)
+func (ttn *TraceTreeNode) Child() Trace {
+	res := new(TraceTreeNode)
 	ttn.Children = append(ttn.Children, res)
 	return res
 }

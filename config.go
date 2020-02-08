@@ -1,5 +1,9 @@
 package qry
 
+// TODO: Possibly move logrus and zap dependencies to a separate package?
+// Slightly annoying that this query decoding lib carries heavy structured
+// logging dependencies with it.
+
 import (
 	"log"
 	"net/url"
@@ -10,27 +14,24 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type (
-	// Config TODO
-	Config struct {
-		Convert    ConvertConfig
-		Separators SeparatorConfig
-		LogTrace   Trace
+// ===== Config =====
 
-		modes levelModes
-	}
+// Config TODO
+type Config struct {
+	Convert    ConfigConvert
+	Separators ConfigSeparate
+	LogTrace   Trace
 
-	// Option TODO
-	Option func(*Config)
-)
+	modes levelModes
+}
 
 func defaultConfig() Config {
 	return Config{
-		Convert: ConvertConfig{
+		Convert: ConfigConvert{
 			IntegerBase: 0,
 			Unescape:    url.QueryUnescape,
 		},
-		Separators: SeparatorConfig{
+		Separators: ConfigSeparate{
 			Fields:  newSeparatorSet('&').Split,
 			KeyVals: newSeparatorSet('=').Pair,
 			Values:  newSeparatorSet(',').Split,
@@ -74,6 +75,19 @@ func (c Config) NewDecoder(opts ...Option) *Decoder {
 	}
 }
 
+// ===== Options =====
+
+// Option TODO
+type Option func(*Config)
+
+func mergeOptions(opts []Option) Option {
+	return func(c *Config) {
+		for _, opt := range opts {
+			opt(c)
+		}
+	}
+}
+
 // ----- Convert options
 
 // ConvertIntegerBaseAs TODO
@@ -88,63 +102,71 @@ func ConvertUnescapeAs(unescape func(string) (string, error)) Option {
 
 // ----- Separator options
 
-// FieldSeparatorsAs TODO
-func FieldSeparatorsAs(seps ...rune) Option {
+// SeparateFieldsBy TODO
+func SeparateFieldsBy(seps ...rune) Option {
 	return func(c *Config) { c.Separators.Fields = newSeparatorSet(seps...).Split }
 }
 
-// KeyValSeparatorsAs TODO
-func KeyValSeparatorsAs(seps ...rune) Option {
+// SeparateKeyValsBy TODO
+func SeparateKeyValsBy(seps ...rune) Option {
 	return func(c *Config) { c.Separators.KeyVals = newSeparatorSet(seps...).Pair }
 }
 
-// ValueSeparatorsAs TODO
-func ValueSeparatorsAs(seps ...rune) Option {
+// SeparateValuesBy TODO
+func SeparateValuesBy(seps ...rune) Option {
 	return func(c *Config) { c.Separators.Values = newSeparatorSet(seps...).Split }
 }
 
 // ----- Set mode options
 
-// SetOptionsAs TODO
-func SetOptionsAs(level DecodeLevel, setOpts ...SetOption) Option {
+// SetLevelVia TODO
+func SetLevelVia(level DecodeLevel, setOpts ...SetOption) Option {
 	return func(c *Config) { c.modes = c.modes.modifiedClone(level, setOpts...) }
 }
 
-// SetQueryOptionsAs TODO
-func SetQueryOptionsAs(setOpts ...SetOption) Option { return SetOptionsAs(LevelQuery, setOpts...) }
+// SetQueryVia TODO
+func SetQueryVia(setOpts ...SetOption) Option { return SetLevelVia(LevelQuery, setOpts...) }
 
-// SetFieldOptionsAs TODO
-func SetFieldOptionsAs(setOpts ...SetOption) Option { return SetOptionsAs(LevelField, setOpts...) }
+// SetFieldVia TODO
+func SetFieldVia(setOpts ...SetOption) Option { return SetLevelVia(LevelField, setOpts...) }
 
-// SetKeyOptionsAs TODO
-func SetKeyOptionsAs(setOpts ...SetOption) Option { return SetOptionsAs(LevelKey, setOpts...) }
+// SetKeyVia TODO
+func SetKeyVia(setOpts ...SetOption) Option { return SetLevelVia(LevelKey, setOpts...) }
 
-// SetValueListOptionsAs TODO
-func SetValueListOptionsAs(setOpts ...SetOption) Option {
-	return SetOptionsAs(LevelValueList, setOpts...)
+// SetValueListVia TODO
+func SetValueListVia(setOpts ...SetOption) Option { return SetLevelVia(LevelValueList, setOpts...) }
+
+// SetValueVia TODO
+func SetValueVia(setOpts ...SetOption) Option { return SetLevelVia(LevelValue, setOpts...) }
+
+// SetAllLevelsVia TODO
+func SetAllLevelsVia(setOpts ...SetOption) Option {
+	var opts []Option
+	for _, level := range []DecodeLevel{LevelQuery, LevelField, LevelKey, LevelValueList, LevelValue} {
+		opts = append(opts, SetLevelVia(level, setOpts...))
+	}
+
+	return mergeOptions(opts)
 }
 
-// SetValueOptionsAs TODO
-func SetValueOptionsAs(setOpts ...SetOption) Option { return SetOptionsAs(LevelValue, setOpts...) }
+// ----- Log trace options
 
-// ----- LogTrace options
-
-// MarkLogTrace TODO
-func MarkLogTrace(marker func(DecodeLevel, string, reflect.Value)) Option {
-	return func(c *Config) { c.LogTrace = MarkTrace(marker) }
+// LogToMarker TODO
+func LogToMarker(marker func(DecodeLevel, string, reflect.Value)) Option {
+	return func(c *Config) { c.LogTrace = TraceMarker(marker) }
 }
 
-// StdLogTrace TODO
-func StdLogTrace(l *log.Logger) Option {
+// LogToStd TODO
+func LogToStd(l *log.Logger) Option {
 	marker := func(level DecodeLevel, input string, target reflect.Value) {
 		l.Print(level.newInfo(input, target).String())
 	}
 
-	return MarkLogTrace(marker)
+	return LogToMarker(marker)
 }
 
-// LogrusLogTrace TODO
-func LogrusLogTrace(logger *logrus.Logger, level logrus.Level) Option {
+// LogToLogrus TODO
+func LogToLogrus(logger *logrus.Logger, level logrus.Level) Option {
 	marker := func(decodeLevel DecodeLevel, input string, target reflect.Value) {
 		logger.WithFields(logrus.Fields{
 			"decodeLevel": decodeLevel.String(),
@@ -154,11 +176,11 @@ func LogrusLogTrace(logger *logrus.Logger, level logrus.Level) Option {
 		}).Log(level, "decode "+decodeLevel.String())
 	}
 
-	return MarkLogTrace(marker)
+	return LogToMarker(marker)
 }
 
-// ZapLogTrace TODO
-func ZapLogTrace(logger *zap.Logger, level zapcore.Level) Option {
+// LogToZap TODO
+func LogToZap(logger *zap.Logger, level zapcore.Level) Option {
 	var loggerFunc func(string, ...zap.Field)
 
 	switch level {
@@ -187,5 +209,5 @@ func ZapLogTrace(logger *zap.Logger, level zapcore.Level) Option {
 		)
 	}
 
-	return MarkLogTrace(marker)
+	return LogToMarker(marker)
 }

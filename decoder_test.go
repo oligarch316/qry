@@ -9,21 +9,73 @@ import (
 
 func TestQueryError(t *testing.T) {
 	t.Run("root", func(t *testing.T) { testRootErrors(t, qry.LevelQuery) })
-	t.Run("literals", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })
-	t.Run("unsupported", func(t *testing.T) { testCommonUnsupportedErrors(t, qry.LevelQuery) })
+	t.Run("literal", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })
+	t.Run("faux literal", func(t *testing.T) { testFauxLiteralErrors(t, qry.LevelQuery) })
+	t.Run("container", func(t *testing.T) { testArrayErrors(t, qry.LevelQuery) })
+	t.Run("unsupported", func(t *testing.T) {
+		testCommonUnsupportedErrors(t, qry.LevelQuery)
+
+		// TODO: All literals when set mode is "disallow"
+	})
 }
 
 // TODO: Field/Key/ValueList/Value Error
 
 func TestQuerySuccess(t *testing.T) {
-	t.Run("literal", func(t *testing.T) {
-		testLiterals(t, qry.LevelQuery)
-		testFauxLiterals(t, qry.LevelQuery)
-	})
+	t.Run("literal", func(t *testing.T) { testLiterals(t, qry.LevelQuery) })
+	t.Run("faux literal", func(t *testing.T) { testFauxLiterals(t, qry.LevelQuery) })
 	t.Run("indirect", func(t *testing.T) { testIndirects(t, qry.LevelQuery) })
 	t.Run("container", func(t *testing.T) {
-		t.Skip("TODO")
-		// TODO
+		base := newTest(
+			configOptionsAs(qry.SetAllLevelsVia(qry.SetAllowLiteral)),
+			decodeLevelAs(qry.LevelQuery),
+		)
+
+		t.Run("[]string target", func(t *testing.T) {
+			var (
+				input    = "field%20A&field%20B"
+				expected = []string{"field A", "field B"}
+				target   []string
+			)
+
+			trace := base.with(inputAs(input)).require(t, &target)
+			if !assert.Equal(t, expected, target) {
+				trace.log(t)
+			}
+		})
+
+		t.Run("[2]string target", func(t *testing.T) {
+			var (
+				input    = "field%20A&field%20B"
+				expected = [2]string{"field A", "field B"}
+				target   [2]string
+			)
+
+			trace := base.with(inputAs(input)).require(t, &target)
+			if !assert.Equal(t, expected, target) {
+				trace.log(t)
+			}
+		})
+
+		t.Run("map[string]string target", func(t *testing.T) {
+			var (
+				input    = "key%20A=vals%20A&key%20B=vals%20B"
+				expected = map[string]string{
+					"key A": "vals A",
+					"key B": "vals B",
+				}
+				target map[string]string
+			)
+
+			trace := base.with(inputAs(input)).require(t, &target)
+			if !assert.Equal(t, expected, target) {
+				trace.log(t)
+			}
+		})
+
+		t.Run("struct{KeyA,KeyB string} target", func(t *testing.T) {
+			t.Skip("TODO")
+		})
 	})
 }
 
@@ -31,7 +83,7 @@ func TestQuerySuccess(t *testing.T) {
 
 func testRootErrors(t *testing.T, level qry.DecodeLevel) {
 	base := newTest(
-		configOptionsAs(qry.SetOptionsAs(level, qry.SetAllowLiteral)),
+		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 		decodeLevelAs(level),
 		inputAs("xyz"),
 		errorLevelAs(qry.LevelRoot),
@@ -50,7 +102,7 @@ func testRootErrors(t *testing.T, level qry.DecodeLevel) {
 
 func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
 	unsupportedTest := newTest(
-		configOptionsAs(qry.SetOptionsAs(level, qry.SetAllowLiteral)),
+		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 		decodeLevelAs(level),
 		inputAs("xyz"),
 		errorLevelAs(level),
@@ -69,16 +121,28 @@ func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
 }
 
 func testLiteralErrors(t *testing.T, level qry.DecodeLevel) {
-	t.Skip("TODO")
+	t.Run("convert", func(t *testing.T) {
+		t.Skip("TODO: all possible strconv.XYZ errors")
+	})
 
-	// converter.Escape()
-	// all possible strconv.XYZ errors
-	// unmarshaler errors
+	t.Run("unescape", func(t *testing.T) {
+		t.Skip("TODO: converter.Unescape error")
+	})
+
+	t.Run("unmarshal", func(t *testing.T) {
+		t.Skip("TODO: unmarshaler error")
+	})
+}
+
+func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
+	t.Run("too small", func(t *testing.T) {
+		t.Skip("TODO: insufficient target length error")
+	})
 }
 
 func testLiterals(t *testing.T, level qry.DecodeLevel) {
 	base := newTest(
-		configOptionsAs(qry.SetOptionsAs(level, qry.SetAllowLiteral)),
+		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 		decodeLevelAs(level),
 	)
 
@@ -189,12 +253,14 @@ func testLiterals(t *testing.T, level qry.DecodeLevel) {
 }
 
 func testIndirects(t *testing.T, level qry.DecodeLevel) {
+	// TODO!!!: Test update mode for indirects
+
 	var (
 		rawInput       = "abc%20xyz"
 		unescapedInput = "abc xyz"
 
 		base = newTest(
-			configOptionsAs(qry.SetOptionsAs(level, qry.SetAllowLiteral)),
+			configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 			decodeLevelAs(level),
 			inputAs(rawInput),
 		)

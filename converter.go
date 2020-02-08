@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// ConvertConfig TODO
-type ConvertConfig struct {
+// ConfigConvert TODO
+type ConfigConvert struct {
 	IntegerBase int
 	Unescape    func(string) (string, error)
 }
@@ -14,12 +14,12 @@ type ConvertConfig struct {
 type convertSetter func(string, reflect.Value) error
 
 type converter struct {
-	ConvertConfig
+	ConfigConvert
 	kindMap map[reflect.Kind]convertSetter
 }
 
-func newConverter(cfg ConvertConfig) *converter {
-	res := &converter{ConvertConfig: cfg}
+func newConverter(cfg ConfigConvert) *converter {
+	res := &converter{ConfigConvert: cfg}
 
 	res.kindMap = map[reflect.Kind]convertSetter{
 		reflect.String: res.setString,
