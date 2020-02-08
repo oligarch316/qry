@@ -50,7 +50,7 @@ func testFauxLiteralErrors(t *testing.T, level qry.DecodeLevel) {
 		t.Skip("TODO: converter.Unescape error")
 	})
 
-	t.Run("too small", func(t *testing.T) {
+	t.Run("array too small", func(t *testing.T) {
 		t.Skip("TODO: insufficient target length error")
 	})
 }
