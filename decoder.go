@@ -103,8 +103,9 @@ type Decoder struct {
 	baseModes  levelModes
 	logTrace   Trace
 
-	converter   *converter
-	unmarshaler *unmarshaler
+	converter    *converter
+	structParser structParser
+	unmarshaler  *unmarshaler
 }
 
 // NewDecoder TODO
@@ -161,8 +162,6 @@ func (d *Decoder) Decode(level DecodeLevel, input string, v interface{}, traces 
 	return d.decode(level, input, val.Elem(), state)
 }
 
-type decodeHandler func(DecodeLevel, string, reflect.Value, *decodeState) (bool, error)
-
 func (d *Decoder) decode(level DecodeLevel, raw string, val reflect.Value, state *decodeState) error {
 	state.trace.Mark(level, raw, val)
 
@@ -170,15 +169,16 @@ func (d *Decoder) decode(level DecodeLevel, raw string, val reflect.Value, state
 		return level.newError("non-settable target", raw, val)
 	}
 
-	// TODO: Break this out and remove the decodeHandler type (unnecessary slice creation)
-	for _, handler := range []decodeHandler{
-		d.handleIndirects,
-		d.handleLiterals,
-		d.handleContainers,
-	} {
-		if complete, err := handler(level, raw, val, state); complete {
-			return err
-		}
+	if complete, err := d.handleIndirects(level, raw, val, state); complete {
+		return err
+	}
+
+	if complete, err := d.handleLiterals(level, raw, val, state); complete {
+		return err
+	}
+
+	if complete, err := d.handleContainers(level, raw, val, state); complete {
+		return err
 	}
 
 	return level.newError("unsupported target type", raw, val)
@@ -287,7 +287,7 @@ func (d *Decoder) handleFauxLiterals(level DecodeLevel, raw string, val reflect.
 
 	str, err := d.converter.Unescape(raw)
 	if err != nil {
-		return true, err
+		return true, level.wrapError(err, raw, val)
 	}
 
 	var dstVal, srcVal reflect.Value
@@ -462,7 +462,72 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		return true, nil
 
 	case reflect.Struct:
-		// TODO
+		// TODO: Any way to make all the shouldReplace checks more elegant?
+
+		if level != LevelQuery && level != LevelField {
+			// Only query and field levels support structs
+			return false, nil
+		}
+
+		var dstStruct reflect.Value
+
+		if shouldReplace {
+			dstStruct = reflect.New(val.Type()).Elem()
+		} else {
+			dstStruct = val
+		}
+
+		items, parseErr := d.structParser.parse(dstStruct)
+		if parseErr != nil {
+			return true, level.wrapError(parseErr, raw, val)
+		}
+
+		switch level {
+		case LevelQuery:
+			rawFields := d.separators.Fields(raw)
+			for _, rawField := range rawFields {
+				var (
+					rawKey, rawValueList      = d.separators.KeyVals(rawField)
+					unescapedKey, unescapeErr = d.converter.Unescape(rawKey)
+				)
+
+				if unescapeErr != nil {
+					return true, level.wrapError(unescapeErr, raw, val)
+				}
+
+				if item, ok := items[unescapedKey]; ok {
+					childState := state.childWithSetMode(LevelValueList, item.setOpts)
+					if err := d.decode(LevelValueList, rawValueList, item.val, childState); err != nil {
+						return true, err
+					}
+				}
+			}
+
+		case LevelField:
+			rawKey, rawValueList := d.separators.KeyVals(raw)
+
+			// TODO: magic => constant
+			if item, ok := items["key"]; ok {
+				childState := state.childWithSetMode(LevelKey, item.setOpts)
+				if err := d.decode(LevelKey, rawKey, item.val, childState); err != nil {
+					return true, err
+				}
+			}
+
+			// TODO: magic => constant
+			if item, ok := items["values"]; ok {
+				childState := state.childWithSetMode(LevelValueList, item.setOpts)
+				if err := d.decode(LevelValueList, rawValueList, item.val, childState); err != nil {
+					return true, err
+				}
+			}
+		}
+
+		if shouldReplace {
+			val.Set(dstStruct)
+		}
+
+		return true, nil
 	}
 
 	return false, nil

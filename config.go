@@ -21,6 +21,7 @@ type Config struct {
 	Convert    ConfigConvert
 	Separators ConfigSeparate
 	LogTrace   Trace
+	TagName    string
 
 	modes levelModes
 }
@@ -36,6 +37,7 @@ func defaultConfig() Config {
 			KeyVals: newSeparatorSet('=').Pair,
 			Values:  newSeparatorSet(',').Split,
 		},
+		TagName: "qry",
 		modes: levelModes{
 			// indirect/container => replace | literal => disallowed
 			LevelQuery:     setMode{},
@@ -67,11 +69,12 @@ func (c Config) With(opts ...Option) Config {
 func (c Config) NewDecoder(opts ...Option) *Decoder {
 	cfg := c.With(opts...)
 	return &Decoder{
-		separators:  cfg.Separators,
-		baseModes:   cfg.modes,
-		logTrace:    cfg.LogTrace,
-		converter:   newConverter(cfg.Convert),
-		unmarshaler: newUnmarshaler(cfg.Convert.Unescape),
+		separators:   cfg.Separators,
+		baseModes:    cfg.modes,
+		logTrace:     cfg.LogTrace,
+		converter:    newConverter(cfg.Convert),
+		structParser: structParser(cfg.TagName),
+		unmarshaler:  newUnmarshaler(cfg.Convert.Unescape),
 	}
 }
 
@@ -121,7 +124,7 @@ func SeparateValuesBy(seps ...rune) Option {
 
 // SetLevelVia TODO
 func SetLevelVia(level DecodeLevel, setOpts ...SetOption) Option {
-	return func(c *Config) { c.modes = c.modes.modifiedClone(level, setOpts...) }
+	return func(c *Config) { c.modes = c.modes.modifiedClone(level, setOpts) }
 }
 
 // SetQueryVia TODO
@@ -211,3 +214,8 @@ func LogToZap(logger *zap.Logger, level zapcore.Level) Option {
 
 	return LogToMarker(marker)
 }
+
+// ----- Tag name option
+
+// TagNameAs TODO
+func TagNameAs(name string) Option { return func(c *Config) { c.TagName = name } }

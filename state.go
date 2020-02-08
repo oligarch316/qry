@@ -15,7 +15,7 @@ const (
 
 type setMode struct{ AllowLiteral, ReplaceContainer, ReplaceIndirect bool }
 
-func (sm *setMode) modify(opts ...SetOption) {
+func (sm *setMode) modify(opts []SetOption) {
 	for _, opt := range opts {
 		switch opt {
 		case SetAllowLiteral:
@@ -36,11 +36,15 @@ func (sm *setMode) modify(opts ...SetOption) {
 
 type levelModes map[DecodeLevel]setMode
 
-func (lm levelModes) modifiedClone(level DecodeLevel, opts ...SetOption) levelModes {
+func (lm levelModes) modifiedClone(level DecodeLevel, opts []SetOption) levelModes {
+	if len(opts) < 1 {
+		return lm
+	}
+
 	res := make(levelModes)
 	for lvl, mode := range lm {
 		if lvl == level {
-			mode.modify(opts...)
+			mode.modify(opts)
 		}
 		res[lvl] = mode
 	}
@@ -59,9 +63,9 @@ func (ds *decodeState) child() *decodeState {
 	}
 }
 
-func (ds *decodeState) childWithSetMode(level DecodeLevel, opts ...SetOption) *decodeState {
+func (ds *decodeState) childWithSetMode(level DecodeLevel, opts []SetOption) *decodeState {
 	return &decodeState{
-		modes: ds.modes.modifiedClone(level, opts...),
+		modes: ds.modes.modifiedClone(level, opts),
 		trace: ds.trace.Child(),
 	}
 }

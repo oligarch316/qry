@@ -11,7 +11,13 @@ func TestQueryError(t *testing.T) {
 	t.Run("root", func(t *testing.T) { testRootErrors(t, qry.LevelQuery) })
 	t.Run("literal", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })
 	t.Run("faux literal", func(t *testing.T) { testFauxLiteralErrors(t, qry.LevelQuery) })
-	t.Run("container", func(t *testing.T) { testArrayErrors(t, qry.LevelQuery) })
+	t.Run("container", func(t *testing.T) {
+		testArrayErrors(t, qry.LevelQuery)
+		testCommonStructErrors(t, qry.LevelQuery)
+		t.Run("struct key unescape", func(t *testing.T) {
+			t.Skip("TODO: converter.Unescape error")
+		})
+	})
 	t.Run("unsupported", func(t *testing.T) {
 		testCommonUnsupportedErrors(t, qry.LevelQuery)
 
@@ -19,13 +25,29 @@ func TestQueryError(t *testing.T) {
 	})
 }
 
-// TODO: Field/Key/ValueList/Value Error
+func TestFieldError(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestKeyError(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestValueListError(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestValueError(t *testing.T) {
+	t.Skip("TODO")
+}
 
 func TestQuerySuccess(t *testing.T) {
 	t.Run("literal", func(t *testing.T) { testLiterals(t, qry.LevelQuery) })
 	t.Run("faux literal", func(t *testing.T) { testFauxLiterals(t, qry.LevelQuery) })
 	t.Run("indirect", func(t *testing.T) { testIndirects(t, qry.LevelQuery) })
 	t.Run("container", func(t *testing.T) {
+		// TODO!!!: Test update mode for containers
+
 		base := newTest(
 			configOptionsAs(qry.SetAllLevelsVia(qry.SetAllowLiteral)),
 			decodeLevelAs(qry.LevelQuery),
@@ -73,13 +95,68 @@ func TestQuerySuccess(t *testing.T) {
 			}
 		})
 
-		t.Run("struct{KeyA,KeyB string} target", func(t *testing.T) {
-			t.Skip("TODO")
+		t.Run("struct target", func(t *testing.T) {
+			structTest := base.with(
+				inputAs("keyA=vals%20A&keyB=vals%20B&keyC=vals%20C"),
+			)
+
+			t.Run("basic keys", func(t *testing.T) {
+				var target struct {
+					KeyA string
+					KeyB string
+				}
+
+				trace := structTest.require(t, &target)
+				success := assert.Equal(t, "vals A", target.KeyA)
+				success = assert.Equal(t, "vals B", target.KeyB) && success
+
+				if !success {
+					trace.log(t)
+				}
+			})
+
+			t.Run("tag named keys", func(t *testing.T) {
+				var target struct {
+					KeyOne string `qry:"keyA"`
+					KeyTwo string `qry:"keyB"`
+				}
+
+				trace := structTest.require(t, &target)
+				success := assert.Equal(t, "vals A", target.KeyOne)
+				success = assert.Equal(t, "vals B", target.KeyTwo) && success
+
+				if !success {
+					trace.log(t)
+				}
+			})
 		})
+
+		// TODO: complicated combinations of
+		// - exported vs. unexported
+		// - embedded vs. not
+		// - tagged as embed vs. not
+		// - tagged w/ name vs. not
+		// in terms of fields
+
+		// TODO: testing key unescaping during struct decoding
 	})
 }
 
-// TODO: Field/Key/ValueList/Value Success
+func TestFieldSuccess(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestKeySuccess(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestValueListSuccess(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestValueSuccess(t *testing.T) {
+	t.Skip("TODO")
+}
 
 func testRootErrors(t *testing.T, level qry.DecodeLevel) {
 	base := newTest(
@@ -123,5 +200,11 @@ func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
 func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
 	t.Run("array too small", func(t *testing.T) {
 		t.Skip("TODO: insufficient target length error")
+	})
+}
+
+func testCommonStructErrors(t *testing.T, level qry.DecodeLevel) {
+	t.Run("explicit embed and name tags", func(t *testing.T) {
+		t.Skip("TODO")
 	})
 }
