@@ -1,6 +1,7 @@
 package qry
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -9,45 +10,92 @@ import (
 )
 
 const (
-	stEmbed = "embed"
-	stSep   = ","
+	sTagSep            = ","
+	sTagOmit           = "-"
+	sTagDirectiveEmbed = "embed"
 )
 
-type (
-	structItem struct {
-		setOpts []SetOption
-		val     reflect.Value
-	}
-	structParser string
-)
+// StructFieldError TODO
+type StructFieldError struct {
+	StructFieldInfo
+	err error
+}
 
-func formatFieldName(str string) string {
-	if str == "" {
+// Unwrap TODO
+func (sfe StructFieldError) Unwrap() error { return sfe.err }
+
+func (sfe StructFieldError) Error() string {
+	return fmt.Sprintf("%s: %s", sfe.StructFieldInfo, sfe.err)
+}
+
+// StructFieldInfo TODO
+type StructFieldInfo struct {
+	Name string
+	Type reflect.Type
+
+	anonymous  bool
+	exported   bool
+	tagName    string
+	tagEmbed   bool
+	tagSetOpts []SetOption
+}
+
+// DecodeName TODO
+func (sfi StructFieldInfo) DecodeName() string {
+	switch {
+	case sfi.tagName != "":
+		return sfi.tagName
+	case sfi.Name == "":
 		return ""
 	}
 
-	// https://golang.org/ref/spec#Source_code_representation
-	r, n := utf8.DecodeRuneInString(str)
-
-	return string(unicode.ToLower(r)) + str[n:]
+	// utf8 is fine because: https://golang.org/ref/spec#Source_code_representation
+	r, n := utf8.DecodeRuneInString(sfi.Name)
+	return string(unicode.ToLower(r)) + sfi.Name[n:]
 }
 
-func parseRawTag(tag string) (name string, embed bool, setOpts []SetOption) {
-	items := strings.Split(tag, stSep)
-	name = items[0]
+func (sfi StructFieldInfo) String() string {
+	return fmt.Sprintf("[%s] %s (%s)", sfi.Name, sfi.Type, sfi.Type.Kind())
+}
 
-	if len(items) > 1 {
-		for _, raw := range items[1:] {
-			if raw == stEmbed {
-				embed = true
-				continue
-			}
+func (sfi StructFieldInfo) newError(msg string) StructFieldError {
+	return StructFieldError{
+		StructFieldInfo: sfi,
+		err:             errors.New(msg),
+	}
+}
 
-			setOpts = append(setOpts, SetOption(raw))
-		}
+type structItem struct {
+	setOpts []SetOption
+	val     reflect.Value
+}
+
+type structParser string
+
+func (sp structParser) loadFieldInfo(field reflect.StructField) (*StructFieldInfo, bool) {
+	rawTag := field.Tag.Get(string(sp))
+	if rawTag == sTagOmit {
+		return nil, true
 	}
 
-	return
+	items := strings.Split(rawTag, sTagSep)
+	res := &StructFieldInfo{
+		Name:      field.Name,
+		Type:      field.Type,
+		anonymous: field.Anonymous,
+		exported:  field.PkgPath == "",
+		tagName:   items[0],
+	}
+
+	for _, item := range items[1:] {
+		if item == sTagDirectiveEmbed {
+			res.tagEmbed = true
+			continue
+		}
+		res.tagSetOpts = append(res.tagSetOpts, SetOption(item))
+	}
+
+	return res, false
 }
 
 func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
@@ -57,6 +105,7 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 	)
 
 	for len(workList) > 0 {
+		// Pop next item (heuristic: guarenteed kind of reflect.Struct)
 		workItem := workList[0]
 		workList = workList[1:]
 
@@ -66,57 +115,76 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 		)
 
 		for i := 0; i < nFields; i++ {
-			var (
-				field  = sType.Field(i)
-				rawTag = field.Tag.Get(string(sp))
-			)
-
-			if rawTag == "-" {
+			fieldInfo, omitted := sp.loadFieldInfo(sType.Field(i))
+			if omitted {
 				continue
 			}
 
-			tagName, tagEmbed, tagSetOpts := parseRawTag(rawTag)
-
-			if tagEmbed && tagName != "" {
-				return nil, fmt.Errorf("invalid struct tag: non-empty name (%q) and embed directives are mutually exclusive", tagName)
-			}
-
-			isExported := field.PkgPath == ""
-
-			switch {
-			case tagEmbed && isExported, tagName == "" && field.Anonymous:
-				// For either of
-				// - exported field with explicit embed tag
-				// - anonymous field with no explicit name tag
-				// that is ...
-
-				// ... ignoring any pointer indirection ...
-				tmpT := field.Type
-				for tmpT.Kind() == reflect.Ptr {
-					tmpT = tmpT.Elem()
+			// Explicit signal for embedding
+			if fieldInfo.tagEmbed {
+				switch {
+				case fieldInfo.tagName != "":
+					return nil, fieldInfo.newError("mutually exclusive non-empty name and embed directives")
+				case fieldInfo.anonymous:
+					return nil, fieldInfo.newError("unecessary embed directive on anonymous field")
+				case !fieldInfo.exported:
+					return nil, fieldInfo.newError("embed directive on unexported field")
 				}
 
-				// ... of kind struct ...
-				if tmpT.Kind() == reflect.Struct {
-					// ... add to the worklist and continue
+				switch fieldInfo.Type.Kind() {
+				case reflect.Struct:
 					workList = append(workList, workItem.Field(i))
 					continue
+				case reflect.Ptr:
+					elemType := fieldInfo.Type.Elem()
+
+					if elemType.Kind() != reflect.Struct {
+						return nil, fieldInfo.newError("embed directive on pointer to invalid type")
+					}
+
+					ptrVal := workItem.Field(i)
+					if ptrVal.IsNil() {
+						ptrVal.Set(reflect.New(elemType))
+					}
+
+					workList = append(workList, ptrVal.Elem())
+					continue
 				}
-			case !isExported:
-				// Ignore all non-exported fields save in the above case
+
+				return nil, fieldInfo.newError("embed directive on invalid type")
+			}
+
+			if fieldInfo.tagName == "" && fieldInfo.anonymous {
+				switch fieldInfo.Type.Kind() {
+				case reflect.Struct:
+					// Here lies the ONLY situation where an unexported field is considered viable
+					workList = append(workList, workItem.Field(i))
+					continue
+				case reflect.Ptr:
+					if fieldInfo.exported && fieldInfo.Type.Elem().Kind() == reflect.Struct {
+						ptrVal := workItem.Field(i)
+						if ptrVal.IsNil() {
+							ptrVal.Set(reflect.New(fieldInfo.Type.Elem()))
+						}
+
+						workList = append(workList, ptrVal.Elem())
+						continue
+					}
+				}
+			}
+
+			if !fieldInfo.exported {
 				continue
 			}
 
-			if tagName == "" {
-				tagName = formatFieldName(field.Name)
-			}
+			decodeName := fieldInfo.DecodeName()
 
 			// TODO: More rigorous priority definition, see
 			// https://golang.org/src/encoding/json/encode.go#L1196
 			// for inspiration. depth > from tag > index sounds right.
-			if _, collision := res[tagName]; !collision {
-				res[tagName] = structItem{
-					setOpts: tagSetOpts,
+			if _, collision := res[decodeName]; !collision {
+				res[decodeName] = structItem{
+					setOpts: fieldInfo.tagSetOpts,
 					val:     workItem.Field(i),
 				}
 			}

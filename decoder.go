@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 )
 
 // DecodeInfo TODO
@@ -15,10 +14,11 @@ type DecodeInfo struct {
 }
 
 func (di DecodeInfo) String() string {
+	// TODO: Just use %q rather than strconv.Quote
 	return fmt.Sprintf(
-		"[%s] %s => %s (%s)",
+		"[%s] %q => %s (%s)",
 		di.Level,
-		strconv.Quote(di.Input),
+		di.Input,
 		di.Target.Type(),
 		di.Target.Kind(),
 	)

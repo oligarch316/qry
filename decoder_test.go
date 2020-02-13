@@ -12,10 +12,12 @@ func TestQueryError(t *testing.T) {
 	t.Run("literal", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })
 	t.Run("faux literal", func(t *testing.T) { testFauxLiteralErrors(t, qry.LevelQuery) })
 	t.Run("container", func(t *testing.T) {
-		testArrayErrors(t, qry.LevelQuery)
-		testCommonStructErrors(t, qry.LevelQuery)
-		t.Run("struct key unescape", func(t *testing.T) {
-			t.Skip("TODO: converter.Unescape error")
+		t.Run("array", func(t *testing.T) { testArrayErrors(t, qry.LevelQuery) })
+		t.Run("struct", func(t *testing.T) {
+			testStructTagErrors(t, qry.LevelQuery)
+			t.Run("key unescape", func(t *testing.T) {
+				t.Skip("TODO: converter.Unescape error")
+			})
 		})
 	})
 	t.Run("unsupported", func(t *testing.T) {
@@ -95,48 +97,7 @@ func TestQuerySuccess(t *testing.T) {
 			}
 		})
 
-		t.Run("struct target", func(t *testing.T) {
-			structTest := base.with(
-				inputAs("keyA=vals%20A&keyB=vals%20B&keyC=vals%20C"),
-			)
-
-			t.Run("basic keys", func(t *testing.T) {
-				var target struct {
-					KeyA string
-					KeyB string
-				}
-
-				trace := structTest.require(t, &target)
-				success := assert.Equal(t, "vals A", target.KeyA)
-				success = assert.Equal(t, "vals B", target.KeyB) && success
-
-				if !success {
-					trace.log(t)
-				}
-			})
-
-			t.Run("tag named keys", func(t *testing.T) {
-				var target struct {
-					KeyOne string `qry:"keyA"`
-					KeyTwo string `qry:"keyB"`
-				}
-
-				trace := structTest.require(t, &target)
-				success := assert.Equal(t, "vals A", target.KeyOne)
-				success = assert.Equal(t, "vals B", target.KeyTwo) && success
-
-				if !success {
-					trace.log(t)
-				}
-			})
-		})
-
-		// TODO: complicated combinations of
-		// - exported vs. unexported
-		// - embedded vs. not
-		// - tagged as embed vs. not
-		// - tagged w/ name vs. not
-		// in terms of fields
+		t.Run("struct", testStructs)
 
 		// TODO: testing key unescaping during struct decoding
 	})
@@ -163,17 +124,19 @@ func testRootErrors(t *testing.T, level qry.DecodeLevel) {
 		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 		decodeLevelAs(level),
 		inputAs("xyz"),
-		errorLevelAs(qry.LevelRoot),
+		checkDecodeError(
+			assertDecodeLevel(qry.LevelRoot),
+		),
 	)
 
 	t.Run("non-pointer target", func(t *testing.T) {
 		var target string
-		base.with(errorAs("non-pointer target")).require(t, target)
+		base.with(errorMessageAs("non-pointer target")).require(t, target)
 	})
 
 	t.Run("nil pointer target", func(t *testing.T) {
 		var target *string
-		base.with(errorAs("nil pointer target")).require(t, target)
+		base.with(errorMessageAs("nil pointer target")).require(t, target)
 	})
 }
 
@@ -182,8 +145,10 @@ func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
 		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
 		decodeLevelAs(level),
 		inputAs("xyz"),
-		errorLevelAs(level),
-		errorAs("unsupported target type"),
+		checkDecodeError(
+			assertDecodeLevel(level),
+		),
+		errorMessageAs("unsupported target type"),
 	)
 
 	t.Run("chan target", func(t *testing.T) {
@@ -198,13 +163,7 @@ func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
 }
 
 func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
-	t.Run("array too small", func(t *testing.T) {
+	t.Run("too small", func(t *testing.T) {
 		t.Skip("TODO: insufficient target length error")
-	})
-}
-
-func testCommonStructErrors(t *testing.T, level qry.DecodeLevel) {
-	t.Run("explicit embed and name tags", func(t *testing.T) {
-		t.Skip("TODO")
 	})
 }

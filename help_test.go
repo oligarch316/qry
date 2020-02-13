@@ -51,11 +51,10 @@ func (tt testTrace) log(t *testing.T) {
 
 type (
 	decodeTest struct {
-		configOpts       []qry.Option
-		decodeLevel      qry.DecodeLevel
-		input            string
-		expectedErr      func(*testing.T, error) bool
-		expectedErrLevel qry.DecodeLevel
+		configOpts      []qry.Option
+		decodeLevel     qry.DecodeLevel
+		input           string
+		errorAssertions []func(*testing.T, error) bool
 	}
 
 	testOpt func(*decodeTest)
@@ -70,15 +69,19 @@ func newTest(opts ...testOpt) (res decodeTest) {
 
 func (dt decodeTest) with(opts ...testOpt) decodeTest {
 	res := decodeTest{
-		input:            dt.input,
-		decodeLevel:      dt.decodeLevel,
-		expectedErr:      dt.expectedErr,
-		expectedErrLevel: dt.expectedErrLevel,
+		input:           dt.input,
+		decodeLevel:     dt.decodeLevel,
+		errorAssertions: dt.errorAssertions,
 	}
 
-	if dt.configOpts != nil {
+	if len(dt.configOpts) > 0 {
 		res.configOpts = make([]qry.Option, len(dt.configOpts))
 		copy(res.configOpts, dt.configOpts)
+	}
+
+	if len(dt.errorAssertions) > 0 {
+		res.errorAssertions = make([]func(*testing.T, error) bool, len(dt.errorAssertions))
+		copy(res.errorAssertions, dt.errorAssertions)
 	}
 
 	for _, opt := range opts {
@@ -96,18 +99,16 @@ func (dt decodeTest) assert(t *testing.T, out interface{}) (testTrace, bool) {
 
 	actualErr := decoder.Decode(dt.decodeLevel, dt.input, out, trace)
 
-	if dt.expectedErr == nil {
+	if len(dt.errorAssertions) < 1 {
 		return trace, assert.NoError(t, actualErr)
 	}
 
-	var decodeErr qry.DecodeError
-	if !errors.As(actualErr, &decodeErr) {
-		return trace, assert.Failf(t, "error is not a DecodeError", "%s (%T)", actualErr, actualErr)
+	success := true
+	for _, check := range dt.errorAssertions {
+		success = check(t, actualErr) && success
 	}
 
-	levelCheck := assert.Equal(t, dt.expectedErrLevel, decodeErr.Level)
-
-	return trace, dt.expectedErr(t, decodeErr.Unwrap()) && levelCheck
+	return trace, success
 }
 
 func (dt decodeTest) require(t *testing.T, out interface{}) testTrace {
@@ -135,16 +136,67 @@ func decodeLevelAs(level qry.DecodeLevel) testOpt {
 	return func(d *decodeTest) { d.decodeLevel = level }
 }
 
-func errorLevelAs(level qry.DecodeLevel) testOpt {
-	return func(d *decodeTest) { d.expectedErrLevel = level }
+func checkDecodeError(assertions ...func(*testing.T, qry.DecodeError) bool) testOpt {
+	check := func(t *testing.T, actual error) bool {
+		var decodeErr qry.DecodeError
+		if !errors.As(actual, &decodeErr) {
+			return assert.Failf(t, "error is not a DecodeError", "%s (%T)", actual, actual)
+		}
+
+		success := true
+		for _, assertion := range assertions {
+			success = assertion(t, decodeErr) && success
+		}
+		return success
+	}
+
+	return func(d *decodeTest) { d.errorAssertions = append(d.errorAssertions, check) }
 }
 
-func errorAs(errString string, msgAndArgs ...interface{}) testOpt {
-	checkErr := func(t *testing.T, err error) bool { return assert.EqualError(t, err, errString, msgAndArgs...) }
-	return func(d *decodeTest) { d.expectedErr = checkErr }
+func assertDecodeLevel(level qry.DecodeLevel, msgAndArgs ...interface{}) func(*testing.T, qry.DecodeError) bool {
+	return func(t *testing.T, actual qry.DecodeError) bool {
+		return assert.Equal(t, level, actual.Level, msgAndArgs...)
+	}
 }
 
-func errorLike(errRx string, msgAndArgs ...interface{}) testOpt {
-	checkErr := func(t *testing.T, err error) bool { return assert.Regexp(t, errRx, err.Error(), msgAndArgs...) }
-	return func(d *decodeTest) { d.expectedErr = checkErr }
+func checkStructFieldError(assertions ...func(*testing.T, qry.StructFieldError) bool) testOpt {
+	check := func(t *testing.T, actual error) bool {
+		var structFieldErr qry.StructFieldError
+		if !errors.As(actual, &structFieldErr) {
+			return assert.Failf(t, "error is not a StructFieldError", "%s (%T)", actual, actual)
+		}
+
+		success := true
+		for _, assertion := range assertions {
+			success = assertion(t, structFieldErr) && success
+		}
+		return success
+	}
+
+	return func(d *decodeTest) { d.errorAssertions = append(d.errorAssertions, check) }
+}
+
+func unwrapperOf(err error) (u interface{ Unwrap() error }, ok bool) {
+	u, ok = err.(interface{ Unwrap() error })
+	return
+}
+
+func errorMessageAs(errString string, msgAndArgs ...interface{}) testOpt {
+	check := func(t *testing.T, actual error) bool {
+		for unwrapper, ok := unwrapperOf(actual); ok; unwrapper, ok = unwrapperOf(actual) {
+			actual = unwrapper.Unwrap()
+		}
+		return assert.EqualError(t, actual, errString, msgAndArgs...)
+	}
+	return func(d *decodeTest) { d.errorAssertions = append(d.errorAssertions, check) }
+}
+
+func errorMessageLike(errRx string, msgAndArgs ...interface{}) testOpt {
+	check := func(t *testing.T, actual error) bool {
+		for unwrapper, ok := unwrapperOf(actual); ok; unwrapper, ok = unwrapperOf(actual) {
+			actual = unwrapper.Unwrap()
+		}
+		return assert.Regexp(t, errRx, actual.Error(), msgAndArgs...)
+	}
+	return func(d *decodeTest) { d.errorAssertions = append(d.errorAssertions, check) }
 }

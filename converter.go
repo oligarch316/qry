@@ -29,7 +29,6 @@ func newConverter(cfg ConfigConvert) *converter {
 		reflect.Int:   res.intSetter(0),
 		reflect.Int8:  res.intSetter(8),
 		reflect.Int16: res.intSetter(16),
-
 		reflect.Int32: res.intSetter(32),
 		reflect.Int64: res.intSetter(64),
 
