@@ -16,7 +16,7 @@ func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
 
 	t.Run("literal", newLiteralSuite(level).subtests)
 	t.Run("faux literal", newFauxLiteralSuite(level).subtests)
-	t.Run("unmarshaler", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("unmarshaler", newUnmarshalerSuite(level).subtests)
 	t.Run("indirect", func(t *testing.T) { t.Skip("TODO") })
 }
 
