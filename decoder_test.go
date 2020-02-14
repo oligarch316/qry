@@ -5,7 +5,6 @@ import (
 
 	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ===== New hotness
@@ -14,42 +13,30 @@ func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
 		return
 	}
 
-	t.Run("literal", newLiteralSuite(level).subtests)
-	t.Run("faux literal", newFauxLiteralSuite(level).subtests)
-	t.Run("unmarshaler", newUnmarshalerSuite(level).subtests)
-	t.Run("indirect", func(t *testing.T) { t.Skip("TODO") })
-}
-
-func defaultInterfaceSubtest(t *testing.T, level qry.DecodeLevel, input string, expected interface{}) {
-	ds := decodeSuite{level: level}
-	ds.run(t, "default interface{} target", func(t *testing.T, decode tDecode) {
-		var target interface{}
-		require.NoError(t, decode(input, &target))
-		assert.Equal(t, expected, target)
-	})
+	t.Run("literal", newLiteralSuite(level).run)
+	t.Run("faux literal", newFauxLiteralSuite(level).run)
+	t.Run("unmarshaler", newUnmarshalerSuite(level).run)
 }
 
 func querySubtests(t *testing.T) {
-	commonSubtests(t, qry.LevelQuery, true)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
-
-	defaultInterfaceSubtest(
-		t,
+	// TODO: Don't run *most* indirects in short mode except for LevelValue (which runs all)
+	indirectSuite := newIndirectSuite(
 		qry.LevelQuery,
 		"key%20A=val%20A1,val%20A2&key%20B=val%20B1,val%20B2",
 		map[string][]string{
 			"key A": []string{"val A1", "val A2"},
 			"key B": []string{"val B1", "val B2"},
 		},
+		true,
 	)
+
+	commonSubtests(t, qry.LevelQuery, true)
+	t.Run("indirect", indirectSuite.run)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
 }
 
 func fieldSubtests(t *testing.T) {
-	commonSubtests(t, qry.LevelField, true)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
-
-	defaultInterfaceSubtest(
-		t,
+	indirectSuite := newIndirectSuite(
 		qry.LevelField,
 		"key%20A=val%20A1,val%20A2",
 		struct {
@@ -59,40 +46,49 @@ func fieldSubtests(t *testing.T) {
 			Key:    "key A",
 			Values: []string{"val A1", "val A2"},
 		},
+		true,
 	)
+
+	commonSubtests(t, qry.LevelField, true)
+	t.Run("indirect", indirectSuite.run)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
 }
 
 func keySubtests(t *testing.T) {
-	commonSubtests(t, qry.LevelKey, true)
-	defaultInterfaceSubtest(
-		t,
+	indirectSuite := newIndirectSuite(
 		qry.LevelKey,
 		"abc%20xyz",
 		"abc xyz",
+		true,
 	)
+
+	commonSubtests(t, qry.LevelKey, true)
+	t.Run("indirect", indirectSuite.run)
 }
 
 func valueListSubtests(t *testing.T) {
-	commonSubtests(t, qry.LevelValueList, true)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
-
-	defaultInterfaceSubtest(
-		t,
+	indirectSuite := newIndirectSuite(
 		qry.LevelValueList,
 		"val%201,val%202",
 		[]string{"val 1", "val 2"},
+		true,
 	)
+
+	commonSubtests(t, qry.LevelValueList, true)
+	t.Run("indirect", indirectSuite.run)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
 }
 
 func valueSubtests(t *testing.T) {
-	commonSubtests(t, qry.LevelValue, false)
-
-	defaultInterfaceSubtest(
-		t,
+	indirectSuite := newIndirectSuite(
 		qry.LevelValue,
 		"abc%20xyz",
 		"abc xyz",
+		false,
 	)
+
+	commonSubtests(t, qry.LevelValue, false)
+	t.Run("indirect", indirectSuite.run)
 }
 
 func TestError(t *testing.T) {

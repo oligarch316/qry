@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/oligarch316/qry"
+	"github.com/stretchr/testify/assert"
 )
 
 type (
@@ -16,13 +17,23 @@ type decodeSuite struct {
 	decodeOpts []qry.Option
 }
 
+func (ds decodeSuite) with(opts ...qry.Option) decodeSuite {
+	res := decodeSuite{level: ds.level}
+	if len(ds.decodeOpts) > 0 {
+		res.decodeOpts = make([]qry.Option, len(ds.decodeOpts))
+		copy(res.decodeOpts, ds.decodeOpts)
+	}
+	res.decodeOpts = append(res.decodeOpts, opts...)
+	return res
+}
+
 func (ds decodeSuite) dumpTraceOnFailure(t *testing.T, trace *qry.TraceTree) {
 	if t.Failed() {
 		t.Logf("Decode Trace:\n%s\n", trace.Sdump())
 	}
 }
 
-func (ds decodeSuite) run(t *testing.T, name string, subtest decodeSubtest) {
+func (ds decodeSuite) runSubtest(t *testing.T, name string, subtest decodeSubtest) {
 	t.Run(name, func(t *testing.T) {
 		// Setup
 		var (
@@ -37,8 +48,10 @@ func (ds decodeSuite) run(t *testing.T, name string, subtest decodeSubtest) {
 		}
 
 		// Test
-		subtest(t, func(input string, v interface{}) error {
-			return decoder.Decode(ds.level, input, v, trace)
+		assert.NotPanics(t, func() {
+			subtest(t, func(input string, v interface{}) error {
+				return decoder.Decode(ds.level, input, v, trace)
+			})
 		})
 	})
 }

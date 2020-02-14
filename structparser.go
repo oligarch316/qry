@@ -137,7 +137,6 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 					continue
 				case reflect.Ptr:
 					elemType := fieldInfo.Type.Elem()
-
 					if elemType.Kind() != reflect.Struct {
 						return nil, fieldInfo.newError("embed directive on pointer to invalid type")
 					}
@@ -154,13 +153,14 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				return nil, fieldInfo.newError("embed directive on invalid type")
 			}
 
-			if fieldInfo.tagName == "" && fieldInfo.anonymous {
-				// TODO: Need to do an unmarshaler check here! If the type is an
-				// unmarshaler, don't treat as embedded!
+			// TODO:
+			// Check if fieldType is unmarshaler, if so skip right to add to worklist
+			// - Also check if PtrTo(fieldType) is unmarshaler, given our initial
+			//   struct must be addressable (heuristics of decoder) and thus its fields are too
 
+			if fieldInfo.tagName == "" && fieldInfo.anonymous {
 				switch fieldInfo.Type.Kind() {
 				case reflect.Struct:
-					// Here lies the ONLY situation where an unexported field is considered viable
 					workList = append(workList, workItem.Field(i))
 					continue
 				case reflect.Ptr:

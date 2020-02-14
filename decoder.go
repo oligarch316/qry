@@ -213,6 +213,9 @@ func (d *Decoder) handleIndirects(level DecodeLevel, raw string, val reflect.Val
 
 		elem := val.Elem()
 
+		// TODO: check elem is unmarshaler here and decode directly into elem if true
+		// - Only need to check elem, not elem.Addr() given interface elements aren't addressable
+
 		// NOTE:
 		// We descend into non-nil pointers here, but nothing more arduous.
 		// It may be possible to descend into other container types (like maps)
@@ -441,6 +444,10 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			}
 
 			if !shouldReplace {
+				// TODO: If elem := dstMap.MapIndex(newKey); elem.IsValid()...
+				// check if elem is unmarshaler and decode into it directly if true
+				// - Only need to check elem, not elem.Addr() given map values are not addressable
+
 				// NOTE: Same general note as seen in handleIndirects where kind == reflect.Interface
 				if elem := dstMap.MapIndex(newKey); elem.IsValid() && elem.Kind() == reflect.Ptr && !elem.IsNil() {
 					if err := d.decode(LevelValueList, rawValueList, elem.Elem(), state.child()); err != nil {

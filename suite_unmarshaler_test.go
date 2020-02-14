@@ -38,31 +38,31 @@ func newUnmarshalerSuite(level qry.DecodeLevel) (res unmarshalerSuite) {
 	return
 }
 
-func (us unmarshalerSuite) subtests(t *testing.T) {
+func (us unmarshalerSuite) run(t *testing.T) {
 	var (
 		rawText       = "abc%20xyz"
 		unescapedText = "abc xyz"
 	)
 
-	us.run(t, "*tUnmarshaler target", func(t *testing.T, decode tDecode) {
+	us.runSubtest(t, "*tUnmarshaler target", func(t *testing.T, decode tDecode) {
 		var target tUnmarshaler
 		require.NoError(t, decode(rawText, &target))
 		target.assertCalledWithValue(t, unescapedText)
 	})
 
-	us.run(t, "**tUnmarshaler target", func(t *testing.T, decode tDecode) {
+	us.runSubtest(t, "**tUnmarshaler target", func(t *testing.T, decode tDecode) {
 		var target = new(tUnmarshaler)
 		require.NoError(t, decode(rawText, &target))
 		target.assertCalledWithValue(t, unescapedText)
 	})
 
-	us.run(t, "*tRawUnmarshaler target", func(t *testing.T, decode tDecode) {
+	us.runSubtest(t, "*tRawUnmarshaler target", func(t *testing.T, decode tDecode) {
 		var target tRawUnmarshaler
 		require.NoError(t, decode(rawText, &target))
 		target.assertCalledWithValue(t, rawText)
 	})
 
-	us.run(t, "**tRawUnmarshaler target", func(t *testing.T, decode tDecode) {
+	us.runSubtest(t, "**tRawUnmarshaler target", func(t *testing.T, decode tDecode) {
 		var target = new(tRawUnmarshaler)
 		require.NoError(t, decode(rawText, &target))
 		target.assertCalledWithValue(t, rawText)
