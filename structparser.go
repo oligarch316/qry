@@ -155,6 +155,9 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 			}
 
 			if fieldInfo.tagName == "" && fieldInfo.anonymous {
+				// TODO: Need to do an unmarshaler check here! If the type is an
+				// unmarshaler, don't treat as embedded!
+
 				switch fieldInfo.Type.Kind() {
 				case reflect.Struct:
 					// Here lies the ONLY situation where an unexported field is considered viable

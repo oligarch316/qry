@@ -7,6 +7,51 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// ===== New hotness
+func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
+	if skipOnShort && testing.Short() {
+		return
+	}
+
+	t.Run("literal", newLiteralSuite(level).subtests)
+	t.Run("faux literal", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("unmarshaler", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("indirect", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func querySubtests(t *testing.T) {
+	commonSubtests(t, qry.LevelQuery, true)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func fieldSubtests(t *testing.T) {
+	commonSubtests(t, qry.LevelField, true)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func keySubtests(t *testing.T) { commonSubtests(t, qry.LevelKey, true) }
+
+func valueListSubtests(t *testing.T) {
+	commonSubtests(t, qry.LevelValueList, true)
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func valueSubtests(t *testing.T) { commonSubtests(t, qry.LevelValue, false) }
+
+func TestError(t *testing.T) {
+	t.Skip("TODO")
+}
+
+func TestSuccess(t *testing.T) {
+	t.Run("query", querySubtests)
+	t.Run("field", fieldSubtests)
+	t.Run("key", keySubtests)
+	t.Run("value list", valueListSubtests)
+	t.Run("value", valueSubtests)
+}
+
+// ===== Old and busted
+
 func TestQueryError(t *testing.T) {
 	t.Run("root", func(t *testing.T) { testRootErrors(t, qry.LevelQuery) })
 	t.Run("literal", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })

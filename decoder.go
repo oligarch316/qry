@@ -14,7 +14,10 @@ type DecodeInfo struct {
 }
 
 func (di DecodeInfo) String() string {
-	// TODO: Just use %q rather than strconv.Quote
+	if !di.Target.IsValid() {
+		return "no info"
+	}
+
 	return fmt.Sprintf(
 		"[%s] %q => %s (%s)",
 		di.Level,
