@@ -5,6 +5,7 @@ import (
 
 	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ===== New hotness
@@ -19,24 +20,80 @@ func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
 	t.Run("indirect", func(t *testing.T) { t.Skip("TODO") })
 }
 
+func defaultInterfaceSubtest(t *testing.T, level qry.DecodeLevel, input string, expected interface{}) {
+	ds := decodeSuite{level: level}
+	ds.run(t, "default interface{} target", func(t *testing.T, decode tDecode) {
+		var target interface{}
+		require.NoError(t, decode(input, &target))
+		assert.Equal(t, expected, target)
+	})
+}
+
 func querySubtests(t *testing.T) {
 	commonSubtests(t, qry.LevelQuery, true)
 	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+
+	defaultInterfaceSubtest(
+		t,
+		qry.LevelQuery,
+		"key%20A=val%20A1,val%20A2&key%20B=val%20B1,val%20B2",
+		map[string][]string{
+			"key A": []string{"val A1", "val A2"},
+			"key B": []string{"val B1", "val B2"},
+		},
+	)
 }
 
 func fieldSubtests(t *testing.T) {
 	commonSubtests(t, qry.LevelField, true)
 	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+
+	defaultInterfaceSubtest(
+		t,
+		qry.LevelField,
+		"key%20A=val%20A1,val%20A2",
+		struct {
+			Key    string
+			Values []string
+		}{
+			Key:    "key A",
+			Values: []string{"val A1", "val A2"},
+		},
+	)
 }
 
-func keySubtests(t *testing.T) { commonSubtests(t, qry.LevelKey, true) }
+func keySubtests(t *testing.T) {
+	commonSubtests(t, qry.LevelKey, true)
+	defaultInterfaceSubtest(
+		t,
+		qry.LevelKey,
+		"abc%20xyz",
+		"abc xyz",
+	)
+}
 
 func valueListSubtests(t *testing.T) {
 	commonSubtests(t, qry.LevelValueList, true)
 	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+
+	defaultInterfaceSubtest(
+		t,
+		qry.LevelValueList,
+		"val%201,val%202",
+		[]string{"val 1", "val 2"},
+	)
 }
 
-func valueSubtests(t *testing.T) { commonSubtests(t, qry.LevelValue, false) }
+func valueSubtests(t *testing.T) {
+	commonSubtests(t, qry.LevelValue, false)
+
+	defaultInterfaceSubtest(
+		t,
+		qry.LevelValue,
+		"abc%20xyz",
+		"abc xyz",
+	)
+}
 
 func TestError(t *testing.T) {
 	t.Skip("TODO")
