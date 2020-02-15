@@ -120,7 +120,7 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				continue
 			}
 
-			// Explicit signal for embedding
+			// Explicit embed
 			if fieldInfo.tagEmbed {
 				switch {
 				case fieldInfo.tagName != "":
@@ -153,12 +153,12 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				return nil, fieldInfo.newError("embed directive on invalid type")
 			}
 
-			// TODO:
-			// Check if fieldType is unmarshaler, if so skip right to add to worklist
-			// - Also check if PtrTo(fieldType) is unmarshaler, given our initial
-			//   struct must be addressable (heuristics of decoder) and thus its fields are too
-
+			// Possible implicit embed
 			if fieldInfo.tagName == "" && fieldInfo.anonymous {
+				// Safe to consider before the unmarshaler check given that a struct w/
+				// anonymous unmarshaler field would already itself be an unmarshaler.
+				// This is true for embedding to any depth.
+
 				switch fieldInfo.Type.Kind() {
 				case reflect.Struct:
 					workList = append(workList, workItem.Field(i))
@@ -176,7 +176,18 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				}
 			}
 
-			if !fieldInfo.exported {
+			// TODO: Check if ...
+			// 1. fieldType is unmarshaler
+			// 2. PtrTo(fieldType) is unmarshaler (current struct is heuristically addressalbe thus so are its fields)
+			isUnmarshaler := false
+
+			if !isUnmarshaler && !fieldInfo.exported {
+				// Return error if intention to consider this field is explicit
+				if fieldInfo.tagName != "" {
+					return nil, fieldInfo.newError("non-empty name directive on invalid type")
+				}
+
+				// Otherwise skip
 				continue
 			}
 
