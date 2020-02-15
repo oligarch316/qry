@@ -16,8 +16,7 @@ func (tnpu tNonPointerUnmarshaler) UnmarshalText(text []byte) error {
 }
 
 type indirectSuite struct {
-	replaceMode decodeSuite
-	updateMode  decodeSuite
+	replaceMode, updateMode decodeSuite
 
 	defaultInput    string
 	defaultExpected interface{}
@@ -47,7 +46,7 @@ func (is indirectSuite) runReplaceSubtests(t *testing.T) {
 		textExpected = "abc xyz"
 	)
 
-	if !is.skipOnShort {
+	if !testing.Short() || !is.skipOnShort {
 		is.replaceMode.runSubtest(t, "non-zero *string target", func(t *testing.T, decode tDecode) {
 			var (
 				original = "orig"
@@ -90,7 +89,7 @@ func (is indirectSuite) runUpdateSubtests(t *testing.T) {
 		textExpected = "abc xyz"
 	)
 
-	if !is.skipOnShort {
+	if !testing.Short() || !is.skipOnShort {
 		is.updateMode.runSubtest(t, "non-zero *string target", func(t *testing.T, decode tDecode) {
 			var (
 				original = "orig"

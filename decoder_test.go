@@ -19,20 +19,29 @@ func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
 }
 
 func querySubtests(t *testing.T) {
-	// TODO: Don't run *most* indirects in short mode except for LevelValue (which runs all)
-	indirectSuite := newIndirectSuite(
-		qry.LevelQuery,
-		"key%20A=val%20A1,val%20A2&key%20B=val%20B1,val%20B2",
-		map[string][]string{
-			"key A": []string{"val A1", "val A2"},
-			"key B": []string{"val B1", "val B2"},
-		},
-		true,
+	var (
+		indirectSuite = newIndirectSuite(
+			qry.LevelQuery,
+			"key%20A=val%20A1,val%20A2&key%20B=val%20B1,val%20B2",
+			map[string][]string{
+				"key A": []string{"val A1", "val A2"},
+				"key B": []string{"val B1", "val B2"},
+			},
+			true,
+		)
+		listSuite = newListSuite(qry.LevelQuery, "&")
 	)
 
 	commonSubtests(t, qry.LevelQuery, true)
 	t.Run("indirect", indirectSuite.run)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("container", func(t *testing.T) {
+		if !testing.Short() {
+			t.Run("list", listSuite.run)
+		}
+
+		t.Run("map", func(t *testing.T) { t.Skip("TODO") })
+		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
+	})
 }
 
 func fieldSubtests(t *testing.T) {
@@ -51,7 +60,10 @@ func fieldSubtests(t *testing.T) {
 
 	commonSubtests(t, qry.LevelField, true)
 	t.Run("indirect", indirectSuite.run)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("container", func(t *testing.T) {
+		t.Run("map", func(t *testing.T) { t.Skip("TODO") })
+		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
+	})
 }
 
 func keySubtests(t *testing.T) {
@@ -67,16 +79,19 @@ func keySubtests(t *testing.T) {
 }
 
 func valueListSubtests(t *testing.T) {
-	indirectSuite := newIndirectSuite(
-		qry.LevelValueList,
-		"val%201,val%202",
-		[]string{"val 1", "val 2"},
-		true,
+	var (
+		indirectSuite = newIndirectSuite(
+			qry.LevelValueList,
+			"val%201,val%202",
+			[]string{"val 1", "val 2"},
+			true,
+		)
+		listSuite = newListSuite(qry.LevelValueList, ",")
 	)
 
 	commonSubtests(t, qry.LevelValueList, true)
 	t.Run("indirect", indirectSuite.run)
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+	t.Run("container", func(t *testing.T) { t.Run("list", listSuite.run) })
 }
 
 func valueSubtests(t *testing.T) {
