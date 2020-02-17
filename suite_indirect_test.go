@@ -8,12 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type tNonPointerUnmarshaler func(string)
-
-func (tnpu tNonPointerUnmarshaler) UnmarshalText(text []byte) error {
-	tnpu(string(text))
-	return nil
-}
+// TODO: Test commplex children like slices/maps/structs as direct interface elements
+// are handled appropriately when the child level is in update mode.
 
 type indirectSuite struct {
 	replaceMode, updateMode decodeSuite
@@ -63,18 +59,18 @@ func (is indirectSuite) runReplaceSubtests(t *testing.T) {
 			require.NoError(t, decode(textInput, &target))
 			assert.Equal(t, textExpected, *target)
 		})
+
+		is.replaceMode.runSubtest(t, "interface{non-zero *string} target", func(t *testing.T, decode tDecode) {
+			var (
+				original             = "orig"
+				target   interface{} = &original
+			)
+
+			require.NoError(t, decode(is.defaultInput, &target))
+			assert.Equal(t, is.defaultExpected, target, "check target")
+			assert.Equal(t, "orig", original, "check original")
+		})
 	}
-
-	is.replaceMode.runSubtest(t, "interface{*string} target", func(t *testing.T, decode tDecode) {
-		var (
-			original             = "orig"
-			target   interface{} = &original
-		)
-
-		require.NoError(t, decode(is.defaultInput, &target))
-		assert.Equal(t, is.defaultExpected, target, "check target")
-		assert.Equal(t, "orig", original, "check original")
-	})
 
 	is.replaceMode.runSubtest(t, "interface{} target", func(t *testing.T, decode tDecode) {
 		var target interface{}
@@ -90,6 +86,17 @@ func (is indirectSuite) runUpdateSubtests(t *testing.T) {
 	)
 
 	if !testing.Short() || !is.skipOnShort {
+		is.updateMode.runSubtest(t, "interface{tNonPointerUnmarshaler} target", func(t *testing.T, decode tDecode) {
+			var (
+				imperativeVar             = "orig"
+				modify                    = tNonPointerUnmarshaler(func(s string) { imperativeVar = s })
+				target        interface{} = modify
+			)
+
+			require.NoError(t, decode(textInput, &target))
+			assert.Equal(t, textExpected, imperativeVar)
+		})
+
 		is.updateMode.runSubtest(t, "non-zero *string target", func(t *testing.T, decode tDecode) {
 			var (
 				original = "orig"
@@ -107,20 +114,7 @@ func (is indirectSuite) runUpdateSubtests(t *testing.T) {
 			assert.Equal(t, textExpected, *target)
 		})
 
-		is.updateMode.runSubtest(t, "interface{tNonPointerUnmarshaler} target", func(t *testing.T, decode tDecode) {
-			t.Skip("TODO")
-
-			var (
-				imperativeVar             = "orig"
-				modify                    = tNonPointerUnmarshaler(func(s string) { imperativeVar = s })
-				target        interface{} = modify
-			)
-
-			require.NoError(t, decode(textInput, &target))
-			assert.Equal(t, textExpected, imperativeVar)
-		})
-
-		is.updateMode.runSubtest(t, "interface{*string} target", func(t *testing.T, decode tDecode) {
+		is.updateMode.runSubtest(t, "interface{non-zero *string} target", func(t *testing.T, decode tDecode) {
 			var (
 				original             = "orig"
 				target   interface{} = &original

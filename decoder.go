@@ -100,6 +100,14 @@ func (dl DecodeLevel) newInternalError(msg string, input string, target reflect.
 	return dl.wrapError(fmt.Errorf("internal: %w", errors.New(msg)), input, target)
 }
 
+// Useful for map and interface elements, which are not addressable and thus not settable
+func ensureSettable(val reflect.Value) reflect.Value {
+	valType := val.Type()
+	res := reflect.New(valType).Elem()
+	res.Set(val)
+	return res
+}
+
 // Decoder TODO
 type Decoder struct {
 	separators ConfigSeparate
@@ -169,7 +177,7 @@ func (d *Decoder) decode(level DecodeLevel, raw string, val reflect.Value, state
 	state.trace.Mark(level, raw, val)
 
 	if !val.CanSet() {
-		return level.newError("non-settable target", raw, val)
+		return level.newInternalError("non-settable target", raw, val)
 	}
 
 	if complete, err := d.handleIndirects(level, raw, val, state); complete {
@@ -193,45 +201,25 @@ func (d *Decoder) handleIndirects(level DecodeLevel, raw string, val reflect.Val
 	switch val.Kind() {
 	case reflect.Ptr:
 		if shouldReplace {
-			elemType := val.Type().Elem()
-			val.Set(reflect.New(elemType))
+			val.Set(reflect.New(val.Type().Elem()))
 		}
 
 		return true, d.decode(level, raw, val.Elem(), state.child())
 
 	case reflect.Interface:
+		var elem reflect.Value
+
 		if shouldReplace {
-			// Create new item of default type for level, process and set
-			newItem := level.newDefault()
-			if err := d.decode(level, raw, newItem, state.child()); err != nil {
-				return true, err
-			}
-
-			val.Set(newItem)
-			return true, nil
+			elem = level.newDefault()
+		} else {
+			elem = ensureSettable(val.Elem())
 		}
 
-		elem := val.Elem()
-
-		// TODO: check elem is unmarshaler here and decode directly into elem if true
-		// - Only need to check elem, not elem.Addr() given interface elements aren't addressable
-
-		// NOTE:
-		// We descend into non-nil pointers here, but nothing more arduous.
-		// It may be possible to descend into other container types (like maps)
-		// but it's not yet clear that any real-world use justifies the work
-		if elem.Kind() == reflect.Ptr && !elem.IsNil() {
-			// Follow pointer and process it's element
-			return true, d.decode(level, raw, elem.Elem(), state.child())
-		}
-
-		// Create a new item of the same type, process and set
-		newItem := reflect.New(elem.Type()).Elem()
-		if err := d.decode(level, raw, newItem, state.child()); err != nil {
+		if err := d.decode(level, raw, elem, state.child()); err != nil {
 			return true, err
 		}
 
-		val.Set(newItem)
+		val.Set(elem)
 		return true, nil
 	}
 
@@ -244,6 +232,8 @@ func (d *Decoder) handleLiterals(level DecodeLevel, raw string, val reflect.Valu
 		return true, err
 	}
 
+	// TODO: Given the CanSet() check/heuristic inherant in decode(...), is there
+	// any actual need for this CanAddr() check? (settable ==impies=> addressable, no?)
 	if val.CanAddr() {
 		if complete, err := d.unmarshaler.handle(level, raw, val.Addr()); complete {
 			return true, err
@@ -391,6 +381,12 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			return false, nil
 		}
 
+		// TODO: While there's certainly no reasonable way to do anything but
+		// replace the entire array (how to choose what index to begin writing
+		// from otherwise?), would it be more correct to return an error if the
+		// set mode for this level is "Update"? Or are errors for array decoding
+		// when using defaults ("Update" being default) malicious?
+
 		if val.Len() < len(rawItems) {
 			return true, level.newError("insufficient target length", raw, val)
 		}
@@ -398,7 +394,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		newArray := reflect.New(val.Type()).Elem()
 
 		for i, rawItem := range rawItems {
-			if err := d.decode(childLevel, rawItem, newArray.Index(i), state); err != nil {
+			if err := d.decode(childLevel, rawItem, newArray.Index(i), state.child()); err != nil {
 				return true, err
 			}
 		}
@@ -443,26 +439,19 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 				return true, err
 			}
 
-			if !shouldReplace {
-				// TODO: If elem := dstMap.MapIndex(newKey); elem.IsValid()...
-				// check if elem is unmarshaler and decode into it directly if true
-				// - Only need to check elem, not elem.Addr() given map values are not addressable
-
-				// NOTE: Same general note as seen in handleIndirects where kind == reflect.Interface
-				if elem := dstMap.MapIndex(newKey); elem.IsValid() && elem.Kind() == reflect.Ptr && !elem.IsNil() {
-					if err := d.decode(LevelValueList, rawValueList, elem.Elem(), state.child()); err != nil {
-						return true, err
-					}
-					continue
-				}
+			elem := dstMap.MapIndex(newKey)
+			if !elem.IsValid() {
+				// Map does not contain newKey
+				elem = reflect.New(elemType).Elem()
+			} else {
+				elem = ensureSettable(elem)
 			}
 
-			newElem := reflect.New(elemType).Elem()
-			if err := d.decode(LevelValueList, rawValueList, newElem, state.child()); err != nil {
+			if err := d.decode(LevelValueList, rawValueList, elem, state.child()); err != nil {
 				return true, err
 			}
 
-			dstMap.SetMapIndex(newKey, newElem)
+			dstMap.SetMapIndex(newKey, elem)
 		}
 
 		if shouldReplace {

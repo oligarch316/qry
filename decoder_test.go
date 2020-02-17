@@ -30,6 +30,7 @@ func querySubtests(t *testing.T) {
 			true,
 		)
 		listSuite = newListSuite(qry.LevelQuery, "&")
+		mapSuite  = newMapSuite(qry.LevelQuery)
 	)
 
 	commonSubtests(t, qry.LevelQuery, true)
@@ -39,29 +40,37 @@ func querySubtests(t *testing.T) {
 			t.Run("list", listSuite.run)
 		}
 
-		t.Run("map", func(t *testing.T) { t.Skip("TODO") })
+		t.Run("map", func(t *testing.T) {
+			if !testing.Short() {
+				mapSuite.run(t)
+			}
+			mapSuite.runMulti(t)
+		})
 		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
 	})
 }
 
 func fieldSubtests(t *testing.T) {
-	indirectSuite := newIndirectSuite(
-		qry.LevelField,
-		"key%20A=val%20A1,val%20A2",
-		struct {
-			Key    string
-			Values []string
-		}{
-			Key:    "key A",
-			Values: []string{"val A1", "val A2"},
-		},
-		true,
+	var (
+		indirectSuite = newIndirectSuite(
+			qry.LevelField,
+			"key%20A=val%20A1,val%20A2",
+			struct {
+				Key    string
+				Values []string
+			}{
+				Key:    "key A",
+				Values: []string{"val A1", "val A2"},
+			},
+			true,
+		)
+		mapSuite = newMapSuite(qry.LevelField)
 	)
 
 	commonSubtests(t, qry.LevelField, true)
 	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
-		t.Run("map", func(t *testing.T) { t.Skip("TODO") })
+		t.Run("map", mapSuite.run)
 		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
 	})
 }

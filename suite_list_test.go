@@ -3,42 +3,11 @@ package qry_test
 import (
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type (
-	tByteUnmarshaler    byte
-	tByteRawUnmarshaler byte
-
-	tRuneUnmarshaler    rune
-	tRuneRawUnmarshaler rune
-)
-
-func (tbu *tByteUnmarshaler) UnmarshalText(text []byte) error {
-	*tbu = tByteUnmarshaler(text[0])
-	return nil
-}
-
-func (tbru *tByteRawUnmarshaler) UnmarshalRawText(text []byte) error {
-	*tbru = tByteRawUnmarshaler(text[0])
-	return nil
-}
-
-func (tru *tRuneUnmarshaler) UnmarshalText(text []byte) error {
-	r, _ := utf8.DecodeRune(text)
-	*tru = tRuneUnmarshaler(r)
-	return nil
-}
-
-func (trru *tRuneRawUnmarshaler) UnmarshalRawText(text []byte) error {
-	r, _ := utf8.DecodeRune(text)
-	*trru = tRuneRawUnmarshaler(r)
-	return nil
-}
 
 type listSuite struct {
 	replaceMode, updateMode decodeSuite
