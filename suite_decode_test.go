@@ -10,7 +10,7 @@ import (
 
 // ===== Decode test types
 
-// Basic unmarshalers
+// ----- Basic unmarshalers
 type (
 	tUnmarshalerData struct {
 		called bool
@@ -33,7 +33,7 @@ func (tud tUnmarshalerData) assertCalledWithValue(t *testing.T, val string) bool
 func (tu *tUnmarshaler) UnmarshalText(text []byte) error        { return tu.doUnmarshal(text) }
 func (tru *tRawUnmarshaler) UnmarshalRawText(text []byte) error { return tru.doUnmarshal(text) }
 
-// Unmarshaler that is not a pointer kind
+// ----- Unmarshaler that is not a pointer kind
 type tNonPointerUnmarshaler func(string)
 
 func (tnpu tNonPointerUnmarshaler) UnmarshalText(text []byte) error {
@@ -41,8 +41,8 @@ func (tnpu tNonPointerUnmarshaler) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// Unmarshalers with byte and rune kinds
-// > used to test that slices of these are not mistaken for faux literals
+// ----- Unmarshalers with byte and rune kinds
+// Used to test that slices of these are not mistaken for faux literals
 type (
 	tByteUnmarshaler    byte
 	tByteRawUnmarshaler byte

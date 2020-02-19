@@ -8,39 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testUnmarshalerData struct {
-	forcedErr error
-	called    bool
-	val       string
-}
-
-func (tud *testUnmarshalerData) doUnmarshal(text []byte) error {
-	tud.called = true
-	tud.val = string(text)
-	return tud.forcedErr
-}
-
-func (tud testUnmarshalerData) assert(t *testing.T, expected string) bool {
-	if !assert.True(t, tud.called) {
-		return false
-	}
-	return assert.Equal(t, expected, tud.val)
-}
-
-type (
-	TestStringAsserter interface{ assert(*testing.T, string) bool }
-
-	TestCustomString   string
-	TestUnmarshaler    struct{ testUnmarshalerData }
-	TestRawUnmarshaler struct{ testUnmarshalerData }
-)
-
-func (tcs TestCustomString) assert(t *testing.T, expected string) bool {
-	return assert.Equal(t, expected, string(tcs))
-}
-func (tu *TestUnmarshaler) UnmarshalText(text []byte) error        { return tu.doUnmarshal(text) }
-func (tru *TestRawUnmarshaler) UnmarshalRawText(text []byte) error { return tru.doUnmarshal(text) }
-
 type testTrace struct{ *qry.TraceTree }
 
 func (tt testTrace) log(t *testing.T) {
