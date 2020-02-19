@@ -29,8 +29,9 @@ func querySubtests(t *testing.T) {
 			},
 			true,
 		)
-		listSuite = newListSuite(qry.LevelQuery, "&")
-		mapSuite  = newMapSuite(qry.LevelQuery)
+		listSuite   = newListSuite(qry.LevelQuery, "&")
+		mapSuite    = newMapSuite(qry.LevelQuery)
+		structSuite = newStructSuite(qry.LevelQuery)
 	)
 
 	commonSubtests(t, qry.LevelQuery, true)
@@ -46,7 +47,8 @@ func querySubtests(t *testing.T) {
 			}
 			mapSuite.runMulti(t)
 		})
-		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
+
+		t.Run("struct", structSuite.run)
 	})
 }
 
@@ -64,14 +66,15 @@ func fieldSubtests(t *testing.T) {
 			},
 			true,
 		)
-		mapSuite = newMapSuite(qry.LevelField)
+		mapSuite    = newMapSuite(qry.LevelField)
+		structSuite = newStructSuite(qry.LevelField)
 	)
 
 	commonSubtests(t, qry.LevelField, true)
 	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
 		t.Run("map", mapSuite.run)
-		t.Run("struct", func(t *testing.T) { t.Skip("TODO") })
+		t.Run("struct", structSuite.run)
 	})
 }
 

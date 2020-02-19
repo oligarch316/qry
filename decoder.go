@@ -115,7 +115,7 @@ type Decoder struct {
 	logTrace   Trace
 
 	converter    *converter
-	structParser structParser
+	structParser *structParser
 	unmarshaler  *unmarshaler
 }
 

@@ -18,10 +18,10 @@ import (
 
 // Config TODO
 type Config struct {
-	Convert    ConfigConvert
-	Separators ConfigSeparate
-	LogTrace   Trace
-	TagName    string
+	Convert     ConfigConvert
+	Separators  ConfigSeparate
+	StructParse ConfigStructParse
+	LogTrace    Trace
 
 	modes levelModes
 }
@@ -33,11 +33,11 @@ func defaultConfig() Config {
 			Unescape:    url.QueryUnescape,
 		},
 		Separators: ConfigSeparate{
-			Fields:  newSeparatorSet('&').Split,
+			Fields:  newSeparatorSet('&').Split, // TODO: Add ';' to default Fields separator set? Check RFC
 			KeyVals: newSeparatorSet('=').Pair,
 			Values:  newSeparatorSet(',').Split,
 		},
-		TagName: "qry",
+		StructParse: ConfigStructParse{TagName: "qry"},
 		modes: levelModes{
 			// indirect/container => replace | literal => disallowed
 			LevelQuery:     setMode{},
@@ -67,14 +67,20 @@ func (c Config) With(opts ...Option) Config {
 
 // NewDecoder TODO
 func (c Config) NewDecoder(opts ...Option) *Decoder {
-	cfg := c.With(opts...)
+	var (
+		cfg          = c.With(opts...)
+		converter    = newConverter(cfg.Convert)
+		unmarshaler  = newUnmarshaler(converter.Unescape)
+		structParser = newStructParser(cfg.StructParse, unmarshaler.check)
+	)
+
 	return &Decoder{
 		separators:   cfg.Separators,
 		baseModes:    cfg.modes,
 		logTrace:     cfg.LogTrace,
-		converter:    newConverter(cfg.Convert),
-		structParser: structParser(cfg.TagName),
-		unmarshaler:  newUnmarshaler(cfg.Convert.Unescape),
+		converter:    converter,
+		structParser: structParser,
+		unmarshaler:  unmarshaler,
 	}
 }
 
@@ -215,7 +221,9 @@ func LogToZap(logger *zap.Logger, level zapcore.Level) Option {
 	return LogToMarker(marker)
 }
 
-// ----- Tag name option
+// ----- StructParse options
 
-// TagNameAs TODO
-func TagNameAs(name string) Option { return func(c *Config) { c.TagName = name } }
+// StructTagNameAs TODO
+func StructTagNameAs(name string) Option {
+	return func(c *Config) { c.StructParse.TagName = name }
+}

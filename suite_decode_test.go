@@ -77,7 +77,7 @@ func (trru *tRuneRawUnmarshaler) UnmarshalRawText(text []byte) error {
 
 type (
 	tDecode       func(string, interface{}) error
-	decodeSubtest func(*testing.T, tDecode)
+	decodeSubtest func(*testing.T, tDecode) // TODO: Change name to decodeTest
 )
 
 type decodeSuite struct {
@@ -101,25 +101,27 @@ func (ds decodeSuite) dumpTraceOnFailure(t *testing.T, trace *qry.TraceTree) {
 	}
 }
 
-func (ds decodeSuite) runSubtest(t *testing.T, name string, subtest decodeSubtest) {
-	t.Run(name, func(t *testing.T) {
-		// Setup
-		var (
-			decoder = qry.NewDecoder(ds.decodeOpts...)
-			trace   = qry.NewTraceTree()
-		)
+func (ds decodeSuite) runTest(t *testing.T, test decodeSubtest) {
+	// Setup
+	var (
+		decoder = qry.NewDecoder(ds.decodeOpts...)
+		trace   = qry.NewTraceTree()
+	)
 
-		// Teardown
-		if testing.Verbose() {
-			// Use defer here to ensure trace dump in FailNow() situations
-			defer ds.dumpTraceOnFailure(t, trace)
-		}
+	// Teardown
+	if testing.Verbose() {
+		// Use defer here to ensure trace dump in FailNow() situations
+		defer ds.dumpTraceOnFailure(t, trace)
+	}
 
-		// Test
-		assert.NotPanics(t, func() {
-			subtest(t, func(input string, v interface{}) error {
-				return decoder.Decode(ds.level, input, v, trace)
-			})
+	// Test
+	assert.NotPanics(t, func() {
+		test(t, func(input string, v interface{}) error {
+			return decoder.Decode(ds.level, input, v, trace)
 		})
 	})
+}
+
+func (ds decodeSuite) runSubtest(t *testing.T, name string, subtest decodeSubtest) {
+	t.Run(name, func(t *testing.T) { ds.runTest(t, subtest) })
 }
