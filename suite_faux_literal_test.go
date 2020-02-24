@@ -25,8 +25,14 @@ func (fls fauxLiteralSuite) run(t *testing.T) {
 
 func (fls fauxLiteralSuite) runByteSubtests(t *testing.T) {
 	var (
-		input    = "abc%20xyz"
-		expected = [7]byte{0x61, 0x62, 0x63, 0x20, 0x78, 0x79, 0x7A}
+		input    = "abc%20三"
+		expected = [7]byte{
+			0x61,             // a
+			0x62,             // b
+			0x63,             // c
+			0x20,             // <space>
+			0xE4, 0xB8, 0x89, // 三 (sān)
+		}
 	)
 
 	fls.runSubtest(t, "[]byte target", func(t *testing.T, decode tDecode) {
@@ -44,8 +50,14 @@ func (fls fauxLiteralSuite) runByteSubtests(t *testing.T) {
 
 func (fls fauxLiteralSuite) runRuneSubtests(t *testing.T) {
 	var (
-		input    = "abc%20xyz"
-		expected = [7]rune{'a', 'b', 'c', ' ', 'x', 'y', 'z'}
+		input    = "abc%20三"
+		expected = [5]rune{
+			'\u0061', // a
+			'\u0062', // b
+			'\u0063', // c
+			'\u0020', // <space>
+			'\u4e09', // 三 (sān)
+		}
 	)
 
 	fls.runSubtest(t, "[]rune target", func(t *testing.T, decode tDecode) {
@@ -54,8 +66,8 @@ func (fls fauxLiteralSuite) runRuneSubtests(t *testing.T) {
 		assert.Equal(t, expected[:], target)
 	})
 
-	fls.runSubtest(t, "[7]rune target", func(t *testing.T, decode tDecode) {
-		var target [7]rune
+	fls.runSubtest(t, "[5]rune target", func(t *testing.T, decode tDecode) {
+		var target [5]rune
 		require.NoError(t, decode(input, &target))
 		assert.Equal(t, expected, target)
 	})

@@ -102,8 +102,7 @@ func (dl DecodeLevel) newInternalError(msg string, input string, target reflect.
 
 // Useful for map and interface elements, which are not addressable and thus not settable
 func ensureSettable(val reflect.Value) reflect.Value {
-	valType := val.Type()
-	res := reflect.New(valType).Elem()
+	res := reflect.New(val.Type()).Elem()
 	res.Set(val)
 	return res
 }
@@ -119,33 +118,33 @@ type Decoder struct {
 	unmarshaler  *unmarshaler
 }
 
-// NewDecoder TODO
+// NewDecoder TODO: friendly.go
 func NewDecoder(opts ...Option) *Decoder { return NewConfig().NewDecoder(opts...) }
 
-// Unescape TODO
+// Unescape TODO: friendly.go
 func (d *Decoder) Unescape(s string) (string, error) { return d.converter.Unescape(s) }
 
-// DecodeQuery TODO
+// DecodeQuery TODO: friendly.go
 func (d *Decoder) DecodeQuery(query string, v interface{}, traces ...Trace) error {
 	return d.Decode(LevelQuery, query, v, traces...)
 }
 
-// DecodeField TODO
+// DecodeField TODO: friendly.go
 func (d *Decoder) DecodeField(field string, v interface{}, traces ...Trace) error {
 	return d.Decode(LevelField, field, v, traces...)
 }
 
-// DecodeKey TODO
+// DecodeKey TODO: friendly.go
 func (d *Decoder) DecodeKey(key string, v interface{}, traces ...Trace) error {
 	return d.Decode(LevelKey, key, v, traces...)
 }
 
-// DecodeValueList TODO
+// DecodeValueList TODO: friendly.go
 func (d *Decoder) DecodeValueList(valueList string, v interface{}, traces ...Trace) error {
 	return d.Decode(LevelValueList, valueList, v, traces...)
 }
 
-// DecodeValue TODO
+// DecodeValue TODO: friendly.go
 func (d *Decoder) DecodeValue(value string, v interface{}, traces ...Trace) error {
 	return d.Decode(LevelValue, value, v, traces...)
 }
@@ -307,7 +306,7 @@ func (d *Decoder) handleFauxLiterals(level DecodeLevel, raw string, val reflect.
 		)
 
 		if srcLen > dstLen {
-			return true, level.newError("insufficient target length", raw, val)
+			return true, level.newError("insufficient destination array length", raw, val)
 		}
 
 		dstVal = reflect.New(val.Type()).Elem()
@@ -388,7 +387,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		// when using defaults ("Update" being default) malicious?
 
 		if val.Len() < len(rawItems) {
-			return true, level.newError("insufficient target length", raw, val)
+			return true, level.newError("insufficient destination array length", raw, val)
 		}
 
 		newArray := reflect.New(val.Type()).Elem()

@@ -7,7 +7,73 @@ import (
 )
 
 // ===== New hotness
-func commonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
+
+// ===== Error
+func TestError(t *testing.T) {
+	t.Run("query", queryErrorSubtests)
+	t.Run("field", fieldErrorSubtests)
+	t.Run("key", keyErrorSubtests)
+	t.Run("value list", valueListErrorSubtests)
+	t.Run("value", valueErrorSubtests)
+}
+
+func runCommonErrorSubtests(t *testing.T, suite decodeErrorSuite, skipOnShort bool) {
+	if skipOnShort && testing.Short() {
+		return
+	}
+
+	t.Run("root", suite.runRootSubtests)
+	t.Run("unmarshaler", suite.runUnmarshalerSubtests)
+	t.Run("literal", suite.runLiteralSubtests)
+	t.Run("faux literal", suite.runFauxLiteralSubtests)
+}
+
+func queryErrorSubtests(t *testing.T) {
+	suite := newErrorSuite(qry.LevelQuery)
+
+	runCommonErrorSubtests(t, suite, true)
+	// TODO: Unsupported tests
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func fieldErrorSubtests(t *testing.T) {
+	suite := newErrorSuite(qry.LevelField)
+
+	runCommonErrorSubtests(t, suite, true)
+	// TODO: Unsupported tests
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func keyErrorSubtests(t *testing.T) {
+	suite := newErrorSuite(qry.LevelKey)
+	runCommonErrorSubtests(t, suite, true)
+	// TODO: Unsupported tests
+}
+
+func valueListErrorSubtests(t *testing.T) {
+	suite := newErrorSuite(qry.LevelQuery)
+
+	runCommonErrorSubtests(t, suite, true)
+	// TODO: Unsupported tests
+	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+}
+
+func valueErrorSubtests(t *testing.T) {
+	suite := newErrorSuite(qry.LevelValue)
+	runCommonErrorSubtests(t, suite, false)
+	// TODO: Unsupported tests
+}
+
+// ===== Success
+func TestSuccess(t *testing.T) {
+	t.Run("query", querySubtests)
+	t.Run("field", fieldSubtests)
+	t.Run("key", keySubtests)
+	t.Run("value list", valueListSubtests)
+	t.Run("value", valueSubtests)
+}
+
+func runCommonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
 	if skipOnShort && testing.Short() {
 		return
 	}
@@ -33,7 +99,7 @@ func querySubtests(t *testing.T) {
 		structSuite = newStructSuite(qry.LevelQuery)
 	)
 
-	commonSubtests(t, qry.LevelQuery, true)
+	runCommonSubtests(t, qry.LevelQuery, true)
 	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
 		if !testing.Short() {
@@ -69,7 +135,7 @@ func fieldSubtests(t *testing.T) {
 		structSuite = newStructSuite(qry.LevelField)
 	)
 
-	commonSubtests(t, qry.LevelField, true)
+	runCommonSubtests(t, qry.LevelField, true)
 	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
 		t.Run("map", mapSuite.run)
@@ -85,7 +151,7 @@ func keySubtests(t *testing.T) {
 		true,
 	)
 
-	commonSubtests(t, qry.LevelKey, true)
+	runCommonSubtests(t, qry.LevelKey, true)
 	t.Run("indirect", indirectSuite.run)
 }
 
@@ -100,7 +166,7 @@ func valueListSubtests(t *testing.T) {
 		listSuite = newListSuite(qry.LevelValueList, ",")
 	)
 
-	commonSubtests(t, qry.LevelValueList, true)
+	runCommonSubtests(t, qry.LevelValueList, true)
 	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) { t.Run("list", listSuite.run) })
 }
@@ -113,20 +179,8 @@ func valueSubtests(t *testing.T) {
 		false,
 	)
 
-	commonSubtests(t, qry.LevelValue, false)
+	runCommonSubtests(t, qry.LevelValue, false)
 	t.Run("indirect", indirectSuite.run)
-}
-
-func TestError(t *testing.T) {
-	t.Skip("TODO")
-}
-
-func TestSuccess(t *testing.T) {
-	t.Run("query", querySubtests)
-	t.Run("field", fieldSubtests)
-	t.Run("key", keySubtests)
-	t.Run("value list", valueListSubtests)
-	t.Run("value", valueSubtests)
 }
 
 // ===== Old and busted
