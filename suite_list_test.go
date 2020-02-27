@@ -44,7 +44,13 @@ func (trru *tRuneRawUnmarshaler) UnmarshalRawText(text []byte) error {
 // ===== Error
 func (des decodeErrorSuite) runListTests(t *testing.T, separator string) {
 	des.runSubtest(t, "array too small error", func(t *testing.T, decode tDecode) {
-		t.Skip("TODO")
+		var (
+			input  = strings.Join([]string{"item A", "item B", "item C"}, separator)
+			target [2]string
+		)
+
+		actual := decode(input, &target)
+		assertErrorMessage(t, "insufficient destination array length", actual)
 	})
 }
 

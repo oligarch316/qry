@@ -242,9 +242,3 @@ func runValueSuccessTests(t *testing.T) {
 		suite.runIndirectDefaultTests(t, "abc%20xyz", "abc xyz")
 	})
 }
-
-// func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
-// 	t.Run("too small", func(t *testing.T) {
-// 		t.Skip("TODO: insufficient target length error")
-// 	})
-// }
