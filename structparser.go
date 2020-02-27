@@ -55,7 +55,10 @@ func (sfi StructFieldInfo) DecodeName() string {
 }
 
 func (sfi StructFieldInfo) String() string {
-	return fmt.Sprintf("[%s] %s (%s)", sfi.Name, sfi.Type, sfi.Type.Kind())
+	if sfi.anonymous {
+		return fmt.Sprintf("%s (%s)", sfi.Type, sfi.Type.Kind())
+	}
+	return fmt.Sprintf("%s %s (%s)", sfi.Name, sfi.Type, sfi.Type.Kind())
 }
 
 func (sfi StructFieldInfo) newError(msg string) StructFieldError {
@@ -65,15 +68,28 @@ func (sfi StructFieldInfo) newError(msg string) StructFieldError {
 	}
 }
 
+// ConfigStructParse TODO
+type ConfigStructParse struct{ TagName string }
+
 type structItem struct {
 	setOpts []SetOption
 	val     reflect.Value
 }
 
-type structParser string
+type structParser struct {
+	ConfigStructParse
+	checkUnmarshaler func(reflect.Type) bool
+}
+
+func newStructParser(cfg ConfigStructParse, checkUnmarshaler func(reflect.Type) bool) *structParser {
+	return &structParser{
+		ConfigStructParse: cfg,
+		checkUnmarshaler:  checkUnmarshaler,
+	}
+}
 
 func (sp structParser) loadFieldInfo(field reflect.StructField) (*StructFieldInfo, bool) {
-	rawTag := field.Tag.Get(string(sp))
+	rawTag := field.Tag.Get(sp.TagName)
 	if rawTag == sTagOmit {
 		return nil, true
 	}
@@ -88,6 +104,10 @@ func (sp structParser) loadFieldInfo(field reflect.StructField) (*StructFieldInf
 	}
 
 	for _, item := range items[1:] {
+		// TODO: is continue on empty string worthwhile here?
+		// - no change in correctness, just eliminate a useless arg to childWithSetMode()
+		// - special mention only because it is technically part of the spec given
+		//   parsing a key of name "-" requires a tag `qry:"-,"` (like encoding/json)
 		if item == sTagDirectiveEmbed {
 			res.tagEmbed = true
 			continue
@@ -96,6 +116,18 @@ func (sp structParser) loadFieldInfo(field reflect.StructField) (*StructFieldInf
 	}
 
 	return res, false
+}
+
+func (sp structParser) canUnmarshal(sfi *StructFieldInfo) bool {
+	/*
+			NOTE:
+			1. We cannot take the .Interface() of unexported fields, so for our
+		       purposes, all unexported fields are not unmarshalers
+			2. Root struct heuristacally addressable
+		       ==implies=> field is addressable
+		       ==implies=> PtrTo check required
+	*/
+	return !sfi.exported && (sp.checkUnmarshaler(sfi.Type) || sp.checkUnmarshaler(reflect.PtrTo(sfi.Type)))
 }
 
 func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
@@ -120,15 +152,23 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				continue
 			}
 
-			// Explicit signal for embedding
+			// Explicit embed
 			if fieldInfo.tagEmbed {
 				switch {
 				case fieldInfo.tagName != "":
 					return nil, fieldInfo.newError("mutually exclusive non-empty name and embed directives")
-				case fieldInfo.anonymous:
-					return nil, fieldInfo.newError("unecessary embed directive on anonymous field")
-				case !fieldInfo.exported:
-					return nil, fieldInfo.newError("embed directive on unexported field")
+				case !fieldInfo.anonymous && !fieldInfo.exported:
+					/*
+						NOTE:
+						We could *almost* disallow 'embed' on anonymous fields,
+						allowing the implicit embed logic to handle all
+						anonymous cases.
+
+						However, for the gotcha, see the tests:
+						> `pathological/anonymous exported embedded unmarshaler`
+						> `pathological/anonymous unexported embedded unmarshaler`
+					*/
+					return nil, fieldInfo.newError("embed directive on non-anonymous unexported field")
 				}
 
 				switch fieldInfo.Type.Kind() {
@@ -136,10 +176,13 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 					workList = append(workList, workItem.Field(i))
 					continue
 				case reflect.Ptr:
-					elemType := fieldInfo.Type.Elem()
+					if !fieldInfo.exported {
+						return nil, fieldInfo.newError("embed directive on unexported pointer field")
+					}
 
+					elemType := fieldInfo.Type.Elem()
 					if elemType.Kind() != reflect.Struct {
-						return nil, fieldInfo.newError("embed directive on pointer to invalid type")
+						return nil, fieldInfo.newError("embed directive on invalid type")
 					}
 
 					ptrVal := workItem.Field(i)
@@ -154,26 +197,44 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 				return nil, fieldInfo.newError("embed directive on invalid type")
 			}
 
-			if fieldInfo.tagName == "" && fieldInfo.anonymous {
+			// Possible implicit embed
+			if fieldInfo.anonymous && fieldInfo.tagName == "" && !sp.canUnmarshal(fieldInfo) {
+				/*
+					NOTE:
+					We could *almost* dispense with the unmarshaler check, given
+					anonymous field is unmarshaler ==> struct is unmarshaler.
+
+					However, for the gotcha, see the test:
+					> `pathological/anonymous exported unmarshaler`
+				*/
+
 				switch fieldInfo.Type.Kind() {
 				case reflect.Struct:
-					// Here lies the ONLY situation where an unexported field is considered viable
 					workList = append(workList, workItem.Field(i))
 					continue
 				case reflect.Ptr:
-					if fieldInfo.exported && fieldInfo.Type.Elem().Kind() == reflect.Struct {
-						ptrVal := workItem.Field(i)
-						if ptrVal.IsNil() {
-							ptrVal.Set(reflect.New(fieldInfo.Type.Elem()))
-						}
+					if fieldInfo.exported {
+						elemType := fieldInfo.Type.Elem()
+						if elemType.Kind() == reflect.Struct {
+							ptrVal := workItem.Field(i)
+							if ptrVal.IsNil() {
+								ptrVal.Set(reflect.New(elemType))
+							}
 
-						workList = append(workList, ptrVal.Elem())
-						continue
+							workList = append(workList, ptrVal.Elem())
+							continue
+						}
 					}
 				}
 			}
 
 			if !fieldInfo.exported {
+				// Return error if there's explicit intention to consider this field
+				if fieldInfo.tagName != "" {
+					return nil, fieldInfo.newError("non-empty name directive on unexported field")
+				}
+
+				// Otherwise skip
 				continue
 			}
 
