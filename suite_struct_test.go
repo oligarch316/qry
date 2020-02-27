@@ -8,15 +8,91 @@ import (
 )
 
 // ===== Error
+type (
+	tStructError            struct{ Key string }
+	tStructErrorUnmarshaler struct{}
+)
 
-// ----- Query
-func (des decodeErrorSuite) runStructQueryTests(t *testing.T) {
-	t.Skip("TODO")
+func (tsqeu *tStructErrorUnmarshaler) UnmarshalText(_ []byte) error { return nil }
+
+func (des decodeErrorSuite) runStructUnescapeTests(t *testing.T) {
+	des.withUnescapeError("forced unescape error").runSubtest(t, "unescape error", func(t *testing.T, decode tDecode) {
+		var target tStructError
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "forced unescape error", actual)
+	})
 }
 
-// ----- Field
-func (des decodeErrorSuite) runStructFieldTests(t *testing.T) {
-	t.Skip("TODO")
+func (des decodeErrorSuite) runStructParseTests(t *testing.T) {
+	t.Run("explicit embed", func(t *testing.T) {
+		des.runSubtest(t, "non-empty tag name", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Embedded struct{ Key string } `qry:"key,embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "mutually exclusive non-empty name and embed directives", actual)
+		})
+
+		des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+			var target struct {
+				embedded struct{ Key string } `qry:",embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "embed directive on non-anonymous unexported field", actual)
+		})
+
+		des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+			var target struct {
+				*tStructError `qry:",embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "embed directive on unexported pointer field", actual)
+		})
+
+		des.runSubtest(t, "non-pointer non-struct", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Key string `qry:",embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "embed directive on invalid type", actual)
+		})
+
+		des.runSubtest(t, "pointer to non-struct", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Embedded *string `qry:",embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "embed directive on invalid type", actual)
+		})
+	})
+
+	t.Run("non-empty tag name", func(t *testing.T) {
+		des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+			var target struct {
+				myKey string `qry:"key"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+		})
+
+		des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+			var target struct {
+				*tStructError `qry:"key"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+		})
+
+		des.runSubtest(t, "pathological anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Embedded struct {
+					tStructErrorUnmarshaler `qry:"key"`
+				} `qry:",embed"`
+			}
+			actual := decode("xyz", &target)
+			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+		})
+	})
 }
 
 // ===== Success
@@ -327,21 +403,6 @@ func (dss decodeSuccessSuite) runStructQueryPathologicalSubtests(t *testing.T) {
 		assert.Equal(t, "unmarshalText called", target.Embedded.KeyC)
 	})
 
-	// TODO: !!!! Turn this into an error test !!!!
-	// dss.runSubtest(t, "anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
-	//     var target struct {
-	//         Embedded struct {
-	//             KeyA, KeyB string
-	//             tStructEmbeddedUnmarshaler `qry:"keyC"`
-	//         } `qry:",embed"`
-	//     }
-	//
-	//     decode(input, &target)
-	//     assert.Equal(t, "val A", target.Embedded.KeyA)
-	//     assert.Equal(t, "val B", target.Embedded.KeyB)
-	//     assert.Equal(t, "TODO", target.Embedded.KeyC)
-	// })
-
 	dss.runSubtest(t, "anonymous exported embedded unmarshaler", func(y *testing.T, decode tDecode) {
 		var target struct {
 			Embedded struct {
@@ -374,8 +435,8 @@ func (dss decodeSuccessSuite) runStructQueryPathologicalSubtests(t *testing.T) {
 // ----- Field
 func (dss decodeSuccessSuite) runStructFieldTests(t *testing.T) {
 	// NOTE:
-	// Just run basics (replace and update) for fields, leave fancier scenarios to
-	// the query level tests.
+	// Just run basics (replace and update) for fields, leave fancier scenarios
+	// to the query level tests.
 	//
 	// This shortcut is no longer OK when/if structParser behavior changes
 	// based on DecodeLevel.

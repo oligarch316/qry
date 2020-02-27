@@ -35,7 +35,13 @@ func queryErrorTests(t *testing.T) {
 			t.Run("list", func(t *testing.T) { suite.runListTests(t, "&") })
 		}
 
-		t.Run("struct", suite.runStructQueryTests)
+		t.Run("struct", func(t *testing.T) {
+			if !testing.Short() {
+				suite.runStructParseTests(t)
+			}
+
+			suite.runStructUnescapeTests(t)
+		})
 	})
 }
 
@@ -54,7 +60,7 @@ func fieldErrorTests(t *testing.T) {
 	})
 
 	t.Run("container", func(t *testing.T) {
-		t.Run("struct", suite.runStructFieldTests)
+		t.Run("struct", suite.runStructParseTests)
 	})
 }
 
