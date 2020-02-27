@@ -5,49 +5,33 @@ import (
 
 	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-type structSuiteBase struct{ replaceMode, updateMode decodeSuite }
+// ===== Error
 
-func newStructSuite(level qry.DecodeLevel) interface{ run(*testing.T) } {
-	var (
-		ds = decodeSuite{
-			level:      level,
-			decodeOpts: []qry.Option{qry.SetAllLevelsVia(qry.SetAllowLiteral)},
-		}
-
-		base = structSuiteBase{
-			replaceMode: ds.with(qry.SetLevelVia(level, qry.SetReplaceContainer)),
-			updateMode:  ds.with(qry.SetLevelVia(level, qry.SetUpdateContainer)),
-		}
-	)
-
-	switch level {
-	case qry.LevelQuery:
-		return structSuiteQuery(base)
-	case qry.LevelField:
-		return structSuiteField(base)
-	}
-
-	return nil
+// ----- Query
+func (des decodeErrorSuite) runStructQueryTests(t *testing.T) {
+	t.Skip("TODO")
 }
 
-// ===== Query
-
-type structSuiteQuery structSuiteBase
-
-func (ssq structSuiteQuery) run(t *testing.T) {
-	t.Run("replace", ssq.runReplaceSubtests)
-	t.Run("update", ssq.runUpdateSubtests)
-	t.Run("omitted", ssq.runOmittedSubtest)
-	t.Run("explicit embed", ssq.runExplicitEmbedSubtests)
-	t.Run("implicit embed", ssq.runImplicitEmbedSubtests)
-	t.Run("unmarshaler", ssq.runUnmarshalerSubtests)
+// ----- Field
+func (des decodeErrorSuite) runStructFieldTests(t *testing.T) {
+	t.Skip("TODO")
 }
 
-// ----- Basics
+// ===== Success
 
+// ----- Query
+func (dss decodeSuccessSuite) runStructQueryTests(t *testing.T) {
+	t.Run("replace", dss.runStructQueryReplaceSubtests)
+	t.Run("update", dss.runStructQueryUpdateSubtests)
+	t.Run("omitted", dss.runStructQueryOmittedSubtest)
+	t.Run("explicit embed", dss.runStructQueryExplicitEmbedSubtests)
+	t.Run("implicit embed", dss.runStructQueryImplicitEmbedSubtests)
+	t.Run("pathological", dss.runStructQueryPathologicalSubtests)
+}
+
+// > Basics
 type (
 	tStructBasic struct {
 		KeyA, KeyB string
@@ -79,10 +63,13 @@ func (tsbtn tStructBasicTagName) assert(t *testing.T, one, two, three, four, twe
 	return assert.Equal(t, twentySix, tsbtn.Key26) && res
 }
 
-func (ssq structSuiteQuery) runReplaceSubtests(t *testing.T) {
-	input := "keyA=val%20A&keyB=val%20B&keyC=val%20C&keyD=val%20D&keyExtra=val%20Extra"
+func (dss decodeSuccessSuite) runStructQueryReplaceSubtests(t *testing.T) {
+	var (
+		input  = "keyA=val%20A&keyB=val%20B&keyC=val%20C&keyD=val%20D&keyExtra=val%20Extra"
+		runner = dss.withSetOpts(qry.SetReplaceContainer)
+	)
 
-	ssq.replaceMode.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
 		var (
 			originalC, originalD = "orig C", "orig D"
 			target               tStructBasic
@@ -91,14 +78,14 @@ func (ssq structSuiteQuery) runReplaceSubtests(t *testing.T) {
 		target.KeyA, target.KeyB, target.KeyZ = "orig A", "orig B", "orig Z"
 		target.KeyC, target.KeyD = &originalC, &originalD
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "val A", "val B", "val C", "val D", "") {
 			assert.Equal(t, "orig C", originalC)
 			assert.Equal(t, "orig D", originalD)
 		}
 	})
 
-	ssq.replaceMode.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
 		var (
 			original3, original4 = "orig 3", "orig 4"
 			target               tStructBasicTagName
@@ -107,7 +94,7 @@ func (ssq structSuiteQuery) runReplaceSubtests(t *testing.T) {
 		target.Key1, target.Key2, target.Key26 = "orig 1", "orig 2", "orig 26"
 		target.Key3, target.Key4 = &original3, &original4
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "val A", "val B", "val C", "val D", "") {
 			assert.Equal(t, "orig 3", original3)
 			assert.Equal(t, "orig 4", original4)
@@ -115,10 +102,13 @@ func (ssq structSuiteQuery) runReplaceSubtests(t *testing.T) {
 	})
 }
 
-func (ssq structSuiteQuery) runUpdateSubtests(t *testing.T) {
-	input := "keyA=val%20A&keyB=val%20B&keyC=val%20C&keyD=val%20D&keyExtra=val%20Extra"
+func (dss decodeSuccessSuite) runStructQueryUpdateSubtests(t *testing.T) {
+	var (
+		input  = "keyA=val%20A&keyB=val%20B&keyC=val%20C&keyD=val%20D&keyExtra=val%20Extra"
+		runner = dss.withSetOpts(qry.SetUpdateContainer)
+	)
 
-	ssq.updateMode.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
 		var (
 			originalC, originalD = "orig C", "orig D"
 			target               tStructBasic
@@ -127,14 +117,14 @@ func (ssq structSuiteQuery) runUpdateSubtests(t *testing.T) {
 		target.KeyA, target.KeyB, target.KeyZ = "orig A", "orig B", "orig Z"
 		target.KeyC, target.KeyD = &originalC, &originalD
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "val A", "val B", "val C", "val D", "orig Z") {
 			assert.Equal(t, "val C", originalC)
 			assert.Equal(t, "val D", originalD)
 		}
 	})
 
-	ssq.updateMode.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
 		var (
 			original3, original4 = "orig 3", "orig 4"
 			target               tStructBasicTagName
@@ -143,24 +133,23 @@ func (ssq structSuiteQuery) runUpdateSubtests(t *testing.T) {
 		target.Key1, target.Key2, target.Key26 = "orig 1", "orig 2", "orig 26"
 		target.Key3, target.Key4 = &original3, &original4
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "val A", "val B", "val C", "val D", "orig 26") {
 			assert.Equal(t, "val C", original3)
 			assert.Equal(t, "val D", original4)
 		}
 	})
 
-	ssq.updateMode.runSubtest(t, "zero basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "zero basic", func(t *testing.T, decode tDecode) {
 		var target tStructBasic
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "val B", "val C", "val D", "")
 	})
 }
 
-// ----- Omitted
-
-func (ssq structSuiteQuery) runOmittedSubtest(t *testing.T) {
-	ssq.replaceMode.runTest(t, func(t *testing.T, decode tDecode) {
+// > Omitted
+func (dss decodeSuccessSuite) runStructQueryOmittedSubtest(t *testing.T) {
+	dss.runTest(t, func(t *testing.T, decode tDecode) {
 		var (
 			input  = "keyA=val%20A&keyB=val%20B"
 			target struct {
@@ -169,14 +158,13 @@ func (ssq structSuiteQuery) runOmittedSubtest(t *testing.T) {
 			}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "", target.KeyA)
 		assert.Equal(t, "", target.KeyB)
 	})
 }
 
-// ----- Explicit embed (via struct tag)
-
+// > Explicit embed (via struct tag)
 type tStructEmbedded struct{ KeyA, KeyB string }
 
 func (tse tStructEmbedded) assert(t *testing.T, expectedA, expectedB string, msgAndArgs ...interface{}) bool {
@@ -184,45 +172,42 @@ func (tse tStructEmbedded) assert(t *testing.T, expectedA, expectedB string, msg
 	return assert.Equal(t, expectedB, tse.KeyB, msgAndArgs...) && res
 }
 
-func (ssq structSuiteQuery) runExplicitEmbedSubtests(t *testing.T) {
-	var (
-		input      = "keyA=val%20A"
-		runSubtest = ssq.updateMode.runSubtest
-	)
+func (dss decodeSuccessSuite) runStructQueryExplicitEmbedSubtests(t *testing.T) {
+	input := "keyA=val%20A"
 
-	runSubtest(t, "embed anonymous unexported struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous unexported struct", func(t *testing.T, decode tDecode) {
 		var target struct {
 			tStructEmbedded `qry:",embed"`
 		}
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "")
 	})
 
-	runSubtest(t, "embed exported struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed exported struct", func(t *testing.T, decode tDecode) {
 		var target struct {
 			Embedded struct {
 				KeyA, KeyB string
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.Embedded.KeyA)
 		assert.Equal(t, "", target.Embedded.KeyB)
 	})
 
-	runSubtest(t, "embed exported zero *struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed exported zero *struct", func(t *testing.T, decode tDecode) {
 		var target struct {
 			Embedded *struct {
 				KeyA, KeyB string
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.Embedded.KeyA)
 		assert.Equal(t, "", target.Embedded.KeyB)
 	})
 
-	runSubtest(t, "embed exported non-zero *struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed exported non-zero *struct", func(t *testing.T, decode tDecode) {
 		var (
 			original = struct{ KeyA, KeyB string }{"orig A", "orig B"}
 			target   = struct {
@@ -232,7 +217,7 @@ func (ssq structSuiteQuery) runExplicitEmbedSubtests(t *testing.T) {
 			}{Embedded: &original}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 
 		targetSuccess := assert.Equal(t, "val A", target.Embedded.KeyA, "check target")
 		targetSuccess = assert.Equal(t, "orig B", target.Embedded.KeyB, "check target") && targetSuccess
@@ -243,7 +228,7 @@ func (ssq structSuiteQuery) runExplicitEmbedSubtests(t *testing.T) {
 		}
 	})
 
-	runSubtest(t, "embed struct chain", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed struct chain", func(t *testing.T, decode tDecode) {
 		var target struct {
 			EmbeddedOne struct {
 				EmbeddedTwo struct {
@@ -252,14 +237,13 @@ func (ssq structSuiteQuery) runExplicitEmbedSubtests(t *testing.T) {
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.EmbeddedOne.EmbeddedTwo.KeyA)
 		assert.Equal(t, "", target.EmbeddedOne.EmbeddedTwo.KeyB)
 	})
 }
 
-// ----- Implicit embed
-
+// > Implicit embed
 type (
 	TStructEmbedded       struct{ KeyA, KeyB string }
 	TStructAnonymousChain struct{ TStructEmbedded }
@@ -270,51 +254,47 @@ func (tse TStructEmbedded) assert(t *testing.T, expectedA, expectedB string, msg
 	return assert.Equal(t, expectedB, tse.KeyB, msgAndArgs...) && res
 }
 
-func (ssq structSuiteQuery) runImplicitEmbedSubtests(t *testing.T) {
-	var (
-		input      = "keyA=val%20A"
-		runSubtest = ssq.updateMode.runSubtest
-	)
+func (dss decodeSuccessSuite) runStructQueryImplicitEmbedSubtests(t *testing.T) {
+	input := "keyA=val%20A"
 
-	runSubtest(t, "embed anonymous unexported struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous unexported struct", func(t *testing.T, decode tDecode) {
 		var target struct{ tStructEmbedded }
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "")
 	})
 
-	runSubtest(t, "embed anonymous exported struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous exported struct", func(t *testing.T, decode tDecode) {
 		var target struct{ TStructEmbedded }
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "")
 	})
 
-	runSubtest(t, "embed anonymous exported zero *struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous exported zero *struct", func(t *testing.T, decode tDecode) {
 		var target struct{ *TStructEmbedded }
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "")
 	})
 
-	runSubtest(t, "embed anonymous exported non-zero *struct", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous exported non-zero *struct", func(t *testing.T, decode tDecode) {
 		var (
 			original = TStructEmbedded{KeyA: "orig A", KeyB: "orig B"}
 			target   = struct{ *TStructEmbedded }{&original}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "val A", "orig B", "check target") {
 			original.assert(t, "val A", "orig B", "check original")
 		}
 	})
 
-	runSubtest(t, "embed anonymous struct chain", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "embed anonymous struct chain", func(t *testing.T, decode tDecode) {
 		var target struct{ TStructAnonymousChain }
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "val A", "")
 	})
 }
 
-// ----- "Tricky" unmarshaler cases
-
+// > Pathological unmarshaler scenarios
 type (
 	tStructEmbeddedUnmarshaler struct{ KeyC string }
 	TStructEmbeddedUnmarshaler struct{ KeyC string }
@@ -330,13 +310,10 @@ func (tseu *TStructEmbeddedUnmarshaler) UnmarshalText(_ []byte) error {
 	return nil
 }
 
-func (ssq structSuiteQuery) runUnmarshalerSubtests(t *testing.T) {
-	var (
-		input      = "keyA=val%20A&keyB=val%20B&keyC=val%20C"
-		runSubtest = ssq.updateMode.runSubtest
-	)
+func (dss decodeSuccessSuite) runStructQueryPathologicalSubtests(t *testing.T) {
+	input := "keyA=val%20A&keyB=val%20B&keyC=val%20C"
 
-	runSubtest(t, "pathological anonymous exported unmarshaler", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "anonymous exported unmarshaler", func(t *testing.T, decode tDecode) {
 		var target struct {
 			Embedded struct {
 				KeyA, KeyB                 string
@@ -344,14 +321,14 @@ func (ssq structSuiteQuery) runUnmarshalerSubtests(t *testing.T) {
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.Embedded.KeyA)
 		assert.Equal(t, "val B", target.Embedded.KeyB)
 		assert.Equal(t, "unmarshalText called", target.Embedded.KeyC)
 	})
 
 	// TODO: !!!! Turn this into an error test !!!!
-	// runSubtest(t, "pathological anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
+	// dss.runSubtest(t, "anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
 	//     var target struct {
 	//         Embedded struct {
 	//             KeyA, KeyB string
@@ -359,13 +336,13 @@ func (ssq structSuiteQuery) runUnmarshalerSubtests(t *testing.T) {
 	//         } `qry:",embed"`
 	//     }
 	//
-	//     require.NoError(t, decode(input, &target))
+	//     decode(input, &target)
 	//     assert.Equal(t, "val A", target.Embedded.KeyA)
 	//     assert.Equal(t, "val B", target.Embedded.KeyB)
 	//     assert.Equal(t, "TODO", target.Embedded.KeyC)
 	// })
 
-	runSubtest(t, "pathological anonymous exported embedded unmarshaler", func(y *testing.T, decode tDecode) {
+	dss.runSubtest(t, "anonymous exported embedded unmarshaler", func(y *testing.T, decode tDecode) {
 		var target struct {
 			Embedded struct {
 				KeyA, KeyB                 string
@@ -373,13 +350,13 @@ func (ssq structSuiteQuery) runUnmarshalerSubtests(t *testing.T) {
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.Embedded.KeyA)
 		assert.Equal(t, "val B", target.Embedded.KeyB)
 		assert.Equal(t, "val C", target.Embedded.KeyC)
 	})
 
-	runSubtest(t, "pathological anonymous unexported embedded unmarshaler", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "anonymous unexported embedded unmarshaler", func(t *testing.T, decode tDecode) {
 		var target struct {
 			Embedded struct {
 				KeyA, KeyB                 string
@@ -387,27 +364,24 @@ func (ssq structSuiteQuery) runUnmarshalerSubtests(t *testing.T) {
 			} `qry:",embed"`
 		}
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, "val A", target.Embedded.KeyA)
 		assert.Equal(t, "val B", target.Embedded.KeyB)
 		assert.Equal(t, "val C", target.Embedded.KeyC)
 	})
 }
 
-// ===== Field
-
-type structSuiteField structSuiteBase
-
-func (ssf structSuiteField) run(t *testing.T) {
+// ----- Field
+func (dss decodeSuccessSuite) runStructFieldTests(t *testing.T) {
 	// NOTE:
-	// Just run replace and update for fields, leave fancier scenarios to the
-	// query level tests.
+	// Just run basics (replace and update) for fields, leave fancier scenarios to
+	// the query level tests.
 	//
 	// This shortcut is no longer OK when/if structParser behavior changes
 	// based on DecodeLevel.
 
-	t.Run("replace", ssf.runReplaceSubtests)
-	t.Run("update", ssf.runUpdateSubtests)
+	t.Run("replace", dss.runStructFieldReplaceSubtests)
+	t.Run("update", dss.runStructFieldUpdateSubtests)
 }
 
 type (
@@ -436,29 +410,32 @@ func (tsfbtn tStructFieldBasicTagName) assert(t *testing.T, expectedKey, expecte
 	return assert.Equal(t, expectedVals, *tsfbtn.MyValues) && res
 }
 
-func (ssf structSuiteField) runReplaceSubtests(t *testing.T) {
-	input := "key%20A=val%20A"
+func (dss decodeSuccessSuite) runStructFieldReplaceSubtests(t *testing.T) {
+	var (
+		input  = "key%20A=val%20A"
+		runner = dss.withSetOpts(qry.SetReplaceContainer)
+	)
 
-	ssf.replaceMode.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
 		var (
 			originalKey, originalVals = "orig key", "orig vals"
 			target                    = tStructFieldBasic{Key: &originalKey, Values: &originalVals}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "key A", "val A") {
 			assert.Equal(t, "orig key", originalKey)
 			assert.Equal(t, "orig vals", originalVals)
 		}
 	})
 
-	ssf.replaceMode.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
 		var (
 			originalKey, originalVals = "orig key", "orig vals"
 			target                    = tStructFieldBasicTagName{MyKey: &originalKey, MyValues: &originalVals}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "key A", "val A") {
 			assert.Equal(t, "orig key", originalKey)
 			assert.Equal(t, "orig vals", originalVals)
@@ -466,38 +443,41 @@ func (ssf structSuiteField) runReplaceSubtests(t *testing.T) {
 	})
 }
 
-func (ssf structSuiteField) runUpdateSubtests(t *testing.T) {
-	input := "key%20A=val%20A"
+func (dss decodeSuccessSuite) runStructFieldUpdateSubtests(t *testing.T) {
+	var (
+		input  = "key%20A=val%20A"
+		runner = dss.withSetOpts(qry.SetUpdateContainer)
+	)
 
-	ssf.updateMode.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic", func(t *testing.T, decode tDecode) {
 		var (
 			originalKey, originalVals = "orig key", "orig vals"
 			target                    = tStructFieldBasic{Key: &originalKey, Values: &originalVals}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "key A", "val A") {
 			assert.Equal(t, "key A", originalKey)
 			assert.Equal(t, "val A", originalVals)
 		}
 	})
 
-	ssf.updateMode.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "basic tag name", func(t *testing.T, decode tDecode) {
 		var (
 			originalKey, originalVals = "orig key", "orig vals"
 			target                    = tStructFieldBasicTagName{MyKey: &originalKey, MyValues: &originalVals}
 		)
 
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		if target.assert(t, "key A", "val A") {
 			assert.Equal(t, "key A", originalKey)
 			assert.Equal(t, "val A", originalVals)
 		}
 	})
 
-	ssf.updateMode.runSubtest(t, "zero basic", func(t *testing.T, decode tDecode) {
+	runner.runSubtest(t, "zero basic", func(t *testing.T, decode tDecode) {
 		var target tStructFieldBasic
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		target.assert(t, "key A", "val A")
 	})
 }

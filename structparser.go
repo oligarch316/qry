@@ -165,8 +165,8 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 						anonymous cases.
 
 						However, for the gotcha, see the tests:
-						> `pathological anonymous exported embedded unmarshaler`
-						> `pathological anonymous unexported embedded unmarshaler`
+						> `pathological/anonymous exported embedded unmarshaler`
+						> `pathological/anonymous unexported embedded unmarshaler`
 					*/
 					return nil, fieldInfo.newError("embed directive on non-anonymous unexported field")
 				}
@@ -205,7 +205,7 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 					anonymous field is unmarshaler ==> struct is unmarshaler.
 
 					However, for the gotcha, see the test:
-					> `pathological anonymous exported unmarshaler`
+					> `pathological/anonymous exported unmarshaler`
 				*/
 
 				switch fieldInfo.Type.Kind() {

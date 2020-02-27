@@ -1,157 +1,226 @@
 package qry_test
 
 import (
+	"regexp"
 	"testing"
 
-	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-type literalSuite struct{ decodeSuite }
+// ===== Error
+func (des decodeErrorSuite) runLiteralTests(t *testing.T) {
+	des.runLiteralUnescapeSubtest(t)
+	des.runLiteralConvertSubtests(t)
+}
 
-func newLiteralSuite(level qry.DecodeLevel) (res literalSuite) {
-	res.level = level
-	res.decodeOpts = []qry.Option{
-		qry.SetLevelVia(level, qry.SetAllowLiteral),
+func (des decodeErrorSuite) runLiteralUnescapeSubtest(t *testing.T) {
+	des.withUnescapeError("forced unescape error").runSubtest(t, "unescape error", func(t *testing.T, decode tDecode) {
+		var target string
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "forced unescape error", actual)
+	})
+}
+
+func (des decodeErrorSuite) runLiteralConvertSubtests(t *testing.T) {
+	var (
+		input    = "xyz"
+		expected = regexp.MustCompile(`strconv\..*: parsing .*: invalid syntax`)
+	)
+
+	var (
+		boolTarget bool
+
+		intTarget   int
+		int8Target  int8
+		int16Target int16
+		int32Target int32
+		int64Target int64
+
+		uintTarget   uint
+		uint8Target  uint8
+		uint16Target uint16
+		uint32Target uint32
+		uint64Target uint64
+
+		float32Target float32
+		float64Target float64
+
+		complex64Target  complex64
+		complex128Target complex128
+	)
+
+	subtests := []struct {
+		name       string
+		target     interface{}
+		runOnShort bool
+	}{
+		{"bool", &boolTarget, true}, // Basic
+
+		{"int", &intTarget, true},    // Basic
+		{"int8", &int8Target, false}, // Extended ...
+		{"int16", &int16Target, false},
+		{"int32", &int32Target, false},
+		{"int64", &int64Target, false},
+
+		{"uint", &uintTarget, true},    // Basic
+		{"uint8", &uint8Target, false}, // Extended ...
+		{"uint16", &uint16Target, false},
+		{"uint32", &uint32Target, false},
+		{"uint64", &uint64Target, false},
+
+		{"float32", &float32Target, true},  // Basic
+		{"float64", &float64Target, false}, // Extended
+
+		{"complex64", &complex64Target, true},    // Basic
+		{"complex128", &complex128Target, false}, // Extended
 	}
-	return
+
+	for _, item := range subtests {
+		if !item.runOnShort && testing.Short() {
+			continue
+		}
+
+		subtest := item
+		des.runSubtest(t, subtest.name+" conversion error", func(t *testing.T, decode tDecode) {
+			actual := decode(input, subtest.target)
+			assert.Regexp(t, expected, actual.Error())
+		})
+	}
 }
 
-func (ls literalSuite) run(t *testing.T) {
-	ls.runStringSubtest(t)
-	ls.runBoolSubtest(t)
-	ls.runIntLikeSubtests(t)
-	ls.runFloatLikeSubtests(t)
+// ===== Success
+func (dss decodeSuccessSuite) runLiteralTests(t *testing.T) {
+	dss.runLiteralStringSubtest(t)
+	dss.runLiteralBoolSubtest(t)
+	dss.runLiteralIntLikeSubtests(t)
+	dss.runLiteralFloatLikeSubtests(t)
 }
 
-func (ls literalSuite) runStringSubtest(t *testing.T) {
-	ls.runSubtest(t, "string target", func(t *testing.T, decode tDecode) {
-		var (
-			input    = "abc%20xyz"
-			expected = "abc xyz"
-			target   string
-		)
-
-		require.NoError(t, decode(input, &target))
-		assert.Equal(t, expected, target)
+func (dss decodeSuccessSuite) runLiteralStringSubtest(t *testing.T) {
+	dss.runSubtest(t, "string target", func(t *testing.T, decode tDecode) {
+		var target string
+		decode("abc%20xyz", &target)
+		assert.Equal(t, "abc xyz", target)
 	})
 }
 
-func (ls literalSuite) runBoolSubtest(t *testing.T) {
-	ls.runSubtest(t, "bool target", func(t *testing.T, decode tDecode) {
-		var (
-			input    = "true"
-			expected = true
-			target   bool
-		)
-
-		require.NoError(t, decode(input, &target))
-		assert.Equal(t, expected, target)
+func (dss decodeSuccessSuite) runLiteralBoolSubtest(t *testing.T) {
+	dss.runSubtest(t, "bool target", func(t *testing.T, decode tDecode) {
+		var target bool
+		decode("true", &target)
+		assert.Equal(t, true, target)
 	})
 }
 
-func (ls literalSuite) runIntLikeSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runLiteralIntLikeSubtests(t *testing.T) {
 	var (
 		input    = "33"
 		expected = 33
 	)
 
-	ls.runSubtest(t, "int target", func(t *testing.T, decode tDecode) {
+	// Basic int
+	dss.runSubtest(t, "int target", func(t *testing.T, decode tDecode) {
 		var target int
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, expected, target)
 	})
 
+	// Extended int
 	if !testing.Short() {
-		ls.runSubtest(t, "int8 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "int8 target", func(t *testing.T, decode tDecode) {
 			var target int8
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, int8(expected), target)
 		})
 
-		ls.runSubtest(t, "int16 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "int16 target", func(t *testing.T, decode tDecode) {
 			var target int16
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, int16(expected), target)
 		})
 
-		ls.runSubtest(t, "int32 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "int32 target", func(t *testing.T, decode tDecode) {
 			var target int32
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, int32(expected), target)
 		})
 
-		ls.runSubtest(t, "int64 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "int64 target", func(t *testing.T, decode tDecode) {
 			var target int64
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, int64(expected), target)
 		})
 	}
 
-	ls.runSubtest(t, "uint target", func(t *testing.T, decode tDecode) {
+	// Basic uint
+	dss.runSubtest(t, "uint target", func(t *testing.T, decode tDecode) {
 		var target uint
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, uint(expected), target)
 	})
 
+	// Extended uint
 	if !testing.Short() {
-		ls.runSubtest(t, "uint8 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "uint8 target", func(t *testing.T, decode tDecode) {
 			var target uint8
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, uint8(expected), target)
 		})
 
-		ls.runSubtest(t, "uint16 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "uint16 target", func(t *testing.T, decode tDecode) {
 			var target uint16
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, uint16(expected), target)
 		})
 
-		ls.runSubtest(t, "uint32 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "uint32 target", func(t *testing.T, decode tDecode) {
 			var target uint32
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, uint32(expected), target)
 		})
 
-		ls.runSubtest(t, "uint64 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "uint64 target", func(t *testing.T, decode tDecode) {
 			var target uint64
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, uint64(expected), target)
 		})
 	}
 }
 
-func (ls literalSuite) runFloatLikeSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runLiteralFloatLikeSubtests(t *testing.T) {
 	var (
 		input    = "2.718"
 		expected = 2.718
 	)
 
-	ls.runSubtest(t, "float32 target", func(t *testing.T, decode tDecode) {
+	// Basic float
+	dss.runSubtest(t, "float32 target", func(t *testing.T, decode tDecode) {
 		var target float32
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, float32(expected), target)
 	})
 
+	// Extended float
 	if !testing.Short() {
-		ls.runSubtest(t, "float64 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "float64 target", func(t *testing.T, decode tDecode) {
 			var target float64
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, float64(expected), target)
 		})
 	}
 
-	ls.runSubtest(t, "complex64 target", func(t *testing.T, decode tDecode) {
+	// Basic complex
+	dss.runSubtest(t, "complex64 target", func(t *testing.T, decode tDecode) {
 		var target complex64
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, complex(float32(expected), 0), target)
 	})
 
+	// Extended complex
 	if !testing.Short() {
-		ls.runSubtest(t, "complex128 target", func(t *testing.T, decode tDecode) {
+		dss.runSubtest(t, "complex128 target", func(t *testing.T, decode tDecode) {
 			var target complex128
-			require.NoError(t, decode(input, &target))
+			decode(input, &target)
 			assert.Equal(t, complex(float64(expected), 0), target)
 		})
 	}

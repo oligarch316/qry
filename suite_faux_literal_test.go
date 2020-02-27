@@ -3,27 +3,59 @@ package qry_test
 import (
 	"testing"
 
-	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-type fauxLiteralSuite struct{ decodeSuite }
-
-func newFauxLiteralSuite(level qry.DecodeLevel) (res fauxLiteralSuite) {
-	res.level = level
-	res.decodeOpts = []qry.Option{
-		qry.SetLevelVia(level, qry.SetAllowLiteral),
-	}
-	return
+// ===== Error
+func (des decodeErrorSuite) runFauxLiteralTests(t *testing.T) {
+	des.runFauxLiteralUnescapeSubtests(t)
+	des.runFauxLiteralArraySizeSubtests(t)
 }
 
-func (fls fauxLiteralSuite) run(t *testing.T) {
-	fls.runByteSubtests(t)
-	fls.runRuneSubtests(t)
+func (des decodeErrorSuite) runFauxLiteralUnescapeSubtests(t *testing.T) {
+	des.withUnescapeError("forced unescape error").runSubtest(t, "unescape error", func(t *testing.T, decode tDecode) {
+		var target []rune
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "forced unescape error", actual)
+	})
 }
 
-func (fls fauxLiteralSuite) runByteSubtests(t *testing.T) {
+func (des decodeErrorSuite) runFauxLiteralArraySizeSubtests(t *testing.T) {
+	var (
+		/*
+		 * a       | 1 byte, 1 rune
+		 * b       | 1 byte, 1 rune
+		 * c       | 1 byte, 1 rune
+		 * <space> | 1 byte, 1 rune
+		 * 三 (sān) | 3 bytes, 1 rune
+		 *
+		 * Total   | 7 bytes, 5 runes
+		 */
+
+		input    = "abc%20三"
+		expected = "insufficient destination array length"
+	)
+
+	des.runSubtest(t, "byte array too small error", func(t *testing.T, decode tDecode) {
+		var target [6]byte
+		actual := decode(input, &target)
+		assertErrorMessage(t, expected, actual)
+	})
+
+	des.runSubtest(t, "rune array too small error", func(t *testing.T, decode tDecode) {
+		var target [4]rune
+		actual := decode(input, &target)
+		assertErrorMessage(t, expected, actual)
+	})
+}
+
+// ===== Success
+func (dss decodeSuccessSuite) runFauxLiteralTests(t *testing.T) {
+	dss.runFauxLiteralByteSubtests(t)
+	dss.runFauxLiteralRuneSubtests(t)
+}
+
+func (dss decodeSuccessSuite) runFauxLiteralByteSubtests(t *testing.T) {
 	var (
 		input    = "abc%20三"
 		expected = [7]byte{
@@ -35,20 +67,20 @@ func (fls fauxLiteralSuite) runByteSubtests(t *testing.T) {
 		}
 	)
 
-	fls.runSubtest(t, "[]byte target", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "[]byte target", func(t *testing.T, decode tDecode) {
 		var target []byte
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, expected[:], target)
 	})
 
-	fls.runSubtest(t, "[7]byte target", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "[7]byte target", func(t *testing.T, decode tDecode) {
 		var target [7]byte
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, expected, target)
 	})
 }
 
-func (fls fauxLiteralSuite) runRuneSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runFauxLiteralRuneSubtests(t *testing.T) {
 	var (
 		input    = "abc%20三"
 		expected = [5]rune{
@@ -60,15 +92,15 @@ func (fls fauxLiteralSuite) runRuneSubtests(t *testing.T) {
 		}
 	)
 
-	fls.runSubtest(t, "[]rune target", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "[]rune target", func(t *testing.T, decode tDecode) {
 		var target []rune
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, expected[:], target)
 	})
 
-	fls.runSubtest(t, "[5]rune target", func(t *testing.T, decode tDecode) {
+	dss.runSubtest(t, "[5]rune target", func(t *testing.T, decode tDecode) {
 		var target [5]rune
-		require.NoError(t, decode(input, &target))
+		decode(input, &target)
 		assert.Equal(t, expected, target)
 	})
 }

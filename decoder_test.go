@@ -6,121 +6,173 @@ import (
 	"github.com/oligarch316/qry"
 )
 
-// ===== New hotness
-
 // ===== Error
 func TestError(t *testing.T) {
-	t.Run("query", queryErrorSubtests)
-	t.Run("field", fieldErrorSubtests)
-	t.Run("key", keyErrorSubtests)
-	t.Run("value list", valueListErrorSubtests)
-	t.Run("value", valueErrorSubtests)
+	t.Run("query", queryErrorTests)
+	t.Run("field", fieldErrorTests)
+	t.Run("key", keyErrorTests)
+	t.Run("value list", valueListErrorTests)
+	t.Run("value", valueErrorTests)
 }
 
-func runCommonErrorSubtests(t *testing.T, suite decodeErrorSuite, skipOnShort bool) {
-	if skipOnShort && testing.Short() {
-		return
+func runCommonErrorTests(t *testing.T, suite decodeErrorSuite) {
+	t.Run("root", suite.runRootTests)
+	t.Run("literal", suite.runLiteralTests)
+	t.Run("faux literal", suite.runFauxLiteralTests)
+	t.Run("unmarshaler", suite.runUnmarshalerTests)
+}
+
+func queryErrorTests(t *testing.T) {
+	suite := newDecodeErrorSuite(qry.LevelQuery)
+
+	if !testing.Short() {
+		runCommonErrorTests(t, suite)
+		t.Run("unsupported", suite.runUnsupportedCommonTests)
 	}
 
-	t.Run("root", suite.runRootSubtests)
-	t.Run("unmarshaler", suite.runUnmarshalerSubtests)
-	t.Run("literal", suite.runLiteralSubtests)
-	t.Run("faux literal", suite.runFauxLiteralSubtests)
+	t.Run("container", func(t *testing.T) {
+		if !testing.Short() {
+			t.Run("list", func(t *testing.T) { suite.runListTests(t, "&") })
+		}
+
+		t.Run("struct", suite.runStructQueryTests)
+	})
 }
 
-func queryErrorSubtests(t *testing.T) {
-	suite := newErrorSuite(qry.LevelQuery)
+func fieldErrorTests(t *testing.T) {
+	suite := newDecodeErrorSuite(qry.LevelField)
 
-	runCommonErrorSubtests(t, suite, true)
-	// TODO: Unsupported tests
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+	if !testing.Short() {
+		runCommonErrorTests(t, suite)
+	}
+
+	t.Run("unsupported", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runUnsupportedCommonTests(t)
+		}
+		suite.runUnsupportedListTests(t)
+	})
+
+	t.Run("container", func(t *testing.T) {
+		t.Run("struct", suite.runStructFieldTests)
+	})
 }
 
-func fieldErrorSubtests(t *testing.T) {
-	suite := newErrorSuite(qry.LevelField)
+func keyErrorTests(t *testing.T) {
+	suite := newDecodeErrorSuite(qry.LevelKey)
 
-	runCommonErrorSubtests(t, suite, true)
-	// TODO: Unsupported tests
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
+	if !testing.Short() {
+		runCommonErrorTests(t, suite)
+	}
+
+	t.Run("unsupported", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runUnsupportedCommonTests(t)
+		}
+
+		suite.runUnsupportedListTests(t)
+		suite.runUnsupportedKeyValTests(t)
+	})
 }
 
-func keyErrorSubtests(t *testing.T) {
-	suite := newErrorSuite(qry.LevelKey)
-	runCommonErrorSubtests(t, suite, true)
-	// TODO: Unsupported tests
+func valueListErrorTests(t *testing.T) {
+	suite := newDecodeErrorSuite(qry.LevelValueList)
+
+	if !testing.Short() {
+		runCommonErrorTests(t, suite)
+	}
+
+	t.Run("unsupported", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runUnsupportedCommonTests(t)
+		}
+		suite.runUnsupportedKeyValTests(t)
+	})
+
+	t.Run("container", func(t *testing.T) {
+		t.Run("list", func(t *testing.T) { suite.runListTests(t, ",") })
+	})
 }
 
-func valueListErrorSubtests(t *testing.T) {
-	suite := newErrorSuite(qry.LevelQuery)
+func valueErrorTests(t *testing.T) {
+	suite := newDecodeErrorSuite(qry.LevelValue)
 
-	runCommonErrorSubtests(t, suite, true)
-	// TODO: Unsupported tests
-	t.Run("container", func(t *testing.T) { t.Skip("TODO") })
-}
-
-func valueErrorSubtests(t *testing.T) {
-	suite := newErrorSuite(qry.LevelValue)
-	runCommonErrorSubtests(t, suite, false)
-	// TODO: Unsupported tests
+	runCommonErrorTests(t, suite)
+	t.Run("unsupported", func(t *testing.T) {
+		suite.runUnsupportedCommonTests(t)
+		suite.runUnsupportedListTests(t)
+		suite.runUnsupportedKeyValTests(t)
+	})
 }
 
 // ===== Success
 func TestSuccess(t *testing.T) {
-	t.Run("query", querySubtests)
-	t.Run("field", fieldSubtests)
-	t.Run("key", keySubtests)
-	t.Run("value list", valueListSubtests)
-	t.Run("value", valueSubtests)
+	t.Run("query", runQuerySuccessTests)
+	t.Run("field", runFieldSuccessTests)
+	t.Run("key", runKeySuccessTests)
+	t.Run("value list", runValueListSuccessTests)
+	t.Run("value", runValueSuccessTests)
 }
 
-func runCommonSubtests(t *testing.T, level qry.DecodeLevel, skipOnShort bool) {
-	if skipOnShort && testing.Short() {
-		return
+func runCommonSuccessTests(t *testing.T, suite decodeSuccessSuite) {
+	t.Run("literal", suite.runLiteralTests)
+	t.Run("faux literal", suite.runFauxLiteralTests)
+	t.Run("unmarshaler", suite.runUnmarshalerTests)
+}
+
+func runQuerySuccessTests(t *testing.T) {
+	suite := newDecodeSuccessSuite(qry.LevelQuery)
+
+	if !testing.Short() {
+		runCommonSuccessTests(t, suite)
 	}
 
-	t.Run("literal", newLiteralSuite(level).run)
-	t.Run("faux literal", newFauxLiteralSuite(level).run)
-	t.Run("unmarshaler", newUnmarshalerSuite(level).run)
-}
+	t.Run("indirect", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runIndirectCommonTests(t)
+		}
 
-func querySubtests(t *testing.T) {
-	var (
-		indirectSuite = newIndirectSuite(
-			qry.LevelQuery,
+		suite.runIndirectDefaultTests(
+			t,
 			"key%20A=val%20A1,val%20A2&key%20B=val%20B1,val%20B2",
 			map[string][]string{
 				"key A": []string{"val A1", "val A2"},
 				"key B": []string{"val B1", "val B2"},
 			},
-			true,
 		)
-		listSuite   = newListSuite(qry.LevelQuery, "&")
-		mapSuite    = newMapSuite(qry.LevelQuery)
-		structSuite = newStructSuite(qry.LevelQuery)
-	)
+	})
 
-	runCommonSubtests(t, qry.LevelQuery, true)
-	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
 		if !testing.Short() {
-			t.Run("list", listSuite.run)
+			t.Run("list", func(t *testing.T) { suite.runListTests(t, "&") })
 		}
 
 		t.Run("map", func(t *testing.T) {
 			if !testing.Short() {
-				mapSuite.run(t)
+				t.Run("single", suite.runMapSingleTests)
 			}
-			mapSuite.runMulti(t)
+
+			t.Run("multi", suite.runMapMultiTests)
 		})
 
-		t.Run("struct", structSuite.run)
+		t.Run("struct", suite.runStructQueryTests)
 	})
 }
 
-func fieldSubtests(t *testing.T) {
-	var (
-		indirectSuite = newIndirectSuite(
-			qry.LevelField,
+func runFieldSuccessTests(t *testing.T) {
+	suite := newDecodeSuccessSuite(qry.LevelField)
+
+	if !testing.Short() {
+		runCommonSuccessTests(t, suite)
+	}
+
+	t.Run("indirect", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runIndirectCommonTests(t)
+		}
+
+		suite.runIndirectDefaultTests(
+			t,
 			"key%20A=val%20A1,val%20A2",
 			struct {
 				Key    string
@@ -129,143 +181,70 @@ func fieldSubtests(t *testing.T) {
 				Key:    "key A",
 				Values: []string{"val A1", "val A2"},
 			},
-			true,
 		)
-		mapSuite    = newMapSuite(qry.LevelField)
-		structSuite = newStructSuite(qry.LevelField)
-	)
+	})
 
-	runCommonSubtests(t, qry.LevelField, true)
-	t.Run("indirect", indirectSuite.run)
 	t.Run("container", func(t *testing.T) {
-		t.Run("map", mapSuite.run)
-		t.Run("struct", structSuite.run)
+		t.Run("map", func(t *testing.T) {
+			t.Run("single", suite.runMapSingleTests)
+		})
+
+		t.Run("struct", suite.runStructFieldTests)
 	})
 }
 
-func keySubtests(t *testing.T) {
-	indirectSuite := newIndirectSuite(
-		qry.LevelKey,
-		"abc%20xyz",
-		"abc xyz",
-		true,
-	)
+func runKeySuccessTests(t *testing.T) {
+	suite := newDecodeSuccessSuite(qry.LevelKey)
 
-	runCommonSubtests(t, qry.LevelKey, true)
-	t.Run("indirect", indirectSuite.run)
+	if !testing.Short() {
+		runCommonSuccessTests(t, suite)
+	}
+
+	t.Run("indirect", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runIndirectCommonTests(t)
+		}
+
+		suite.runIndirectDefaultTests(t, "abc%20xyz", "abc xyz")
+	})
 }
 
-func valueListSubtests(t *testing.T) {
-	var (
-		indirectSuite = newIndirectSuite(
-			qry.LevelValueList,
+func runValueListSuccessTests(t *testing.T) {
+	suite := newDecodeSuccessSuite(qry.LevelValueList)
+
+	if !testing.Short() {
+		runCommonSuccessTests(t, suite)
+	}
+
+	t.Run("indirect", func(t *testing.T) {
+		if !testing.Short() {
+			suite.runIndirectCommonTests(t)
+		}
+
+		suite.runIndirectDefaultTests(
+			t,
 			"val%201,val%202",
 			[]string{"val 1", "val 2"},
-			true,
 		)
-		listSuite = newListSuite(qry.LevelValueList, ",")
-	)
+	})
 
-	runCommonSubtests(t, qry.LevelValueList, true)
-	t.Run("indirect", indirectSuite.run)
-	t.Run("container", func(t *testing.T) { t.Run("list", listSuite.run) })
-}
-
-func valueSubtests(t *testing.T) {
-	indirectSuite := newIndirectSuite(
-		qry.LevelValue,
-		"abc%20xyz",
-		"abc xyz",
-		false,
-	)
-
-	runCommonSubtests(t, qry.LevelValue, false)
-	t.Run("indirect", indirectSuite.run)
-}
-
-// ===== Old and busted
-
-func TestQueryError(t *testing.T) {
-	t.Run("root", func(t *testing.T) { testRootErrors(t, qry.LevelQuery) })
-	t.Run("literal", func(t *testing.T) { testLiteralErrors(t, qry.LevelQuery) })
-	t.Run("faux literal", func(t *testing.T) { testFauxLiteralErrors(t, qry.LevelQuery) })
 	t.Run("container", func(t *testing.T) {
-		t.Run("array", func(t *testing.T) { testArrayErrors(t, qry.LevelQuery) })
-		t.Run("struct", func(t *testing.T) {
-			testStructTagErrors(t, qry.LevelQuery)
-			t.Run("key unescape", func(t *testing.T) {
-				t.Skip("TODO: converter.Unescape error")
-			})
-		})
-	})
-	t.Run("unsupported", func(t *testing.T) {
-		testCommonUnsupportedErrors(t, qry.LevelQuery)
-
-		// TODO: All literals when set mode is "disallow"
+		t.Run("list", func(t *testing.T) { suite.runListTests(t, ",") })
 	})
 }
 
-func TestFieldError(t *testing.T) {
-	t.Skip("TODO")
-}
+func runValueSuccessTests(t *testing.T) {
+	suite := newDecodeSuccessSuite(qry.LevelValue)
 
-func TestKeyError(t *testing.T) {
-	t.Skip("TODO")
-}
-
-func TestValueListError(t *testing.T) {
-	t.Skip("TODO")
-}
-
-func TestValueError(t *testing.T) {
-	t.Skip("TODO")
-}
-
-func testRootErrors(t *testing.T, level qry.DecodeLevel) {
-	base := newTest(
-		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
-		decodeLevelAs(level),
-		inputAs("xyz"),
-		checkDecodeError(
-			assertDecodeLevel(qry.LevelRoot),
-		),
-	)
-
-	t.Run("non-pointer target", func(t *testing.T) {
-		var target string
-		base.with(errorMessageAs("non-pointer target")).require(t, target)
-	})
-
-	t.Run("nil pointer target", func(t *testing.T) {
-		var target *string
-		base.with(errorMessageAs("nil pointer target")).require(t, target)
+	runCommonSuccessTests(t, suite)
+	t.Run("indirect", func(t *testing.T) {
+		suite.runIndirectCommonTests(t)
+		suite.runIndirectDefaultTests(t, "abc%20xyz", "abc xyz")
 	})
 }
 
-func testCommonUnsupportedErrors(t *testing.T, level qry.DecodeLevel) {
-	unsupportedTest := newTest(
-		configOptionsAs(qry.SetLevelVia(level, qry.SetAllowLiteral)),
-		decodeLevelAs(level),
-		inputAs("xyz"),
-		checkDecodeError(
-			assertDecodeLevel(level),
-		),
-		errorMessageAs("unsupported target type"),
-	)
-
-	t.Run("chan target", func(t *testing.T) {
-		var target chan struct{}
-		unsupportedTest.require(t, &target)
-	})
-
-	t.Run("func target", func(t *testing.T) {
-		var target func()
-		unsupportedTest.require(t, &target)
-	})
-}
-
-func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
-	t.Run("too small", func(t *testing.T) {
-		t.Skip("TODO: insufficient target length error")
-	})
-}
+// func testArrayErrors(t *testing.T, level qry.DecodeLevel) {
+// 	t.Run("too small", func(t *testing.T) {
+// 		t.Skip("TODO: insufficient target length error")
+// 	})
+// }
