@@ -39,12 +39,12 @@ func defaultConfig() Config {
 		},
 		StructParse: ConfigStructParse{TagName: "qry"},
 		modes: levelModes{
-			// indirect/container => replace | literal => disallowed
+			// indirect/container => update | literal => disallowed
 			LevelQuery:     setMode{},
 			LevelField:     setMode{},
 			LevelValueList: setMode{},
 
-			// indirect/container => replace | literal => allowed
+			// indirect/container => update | literal => allowed
 			LevelKey:   setMode{AllowLiteral: true},
 			LevelValue: setMode{AllowLiteral: true},
 		},
