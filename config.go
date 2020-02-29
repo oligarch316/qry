@@ -18,10 +18,11 @@ import (
 
 // Config TODO
 type Config struct {
-	Convert     ConfigConvert
-	Separators  ConfigSeparate
-	StructParse ConfigStructParse
-	LogTrace    Trace
+	Convert           ConfigConvert
+	IgnoreInvalidKeys bool
+	LogTrace          Trace
+	Separators        ConfigSeparate
+	StructParse       ConfigStructParse
 
 	modes levelModes
 }
@@ -32,12 +33,16 @@ func defaultConfig() Config {
 			IntegerBase: 0,
 			Unescape:    url.QueryUnescape,
 		},
+		IgnoreInvalidKeys: false,
+		LogTrace:          nil,
 		Separators: ConfigSeparate{
-			Fields:  newSeparatorSet('&').Split, // TODO: Add ';' to default Fields separator set? Check RFC
-			KeyVals: newSeparatorSet('=').Pair,
-			Values:  newSeparatorSet(',').Split,
+			Fields:   newSeparatorSet('&').Split, // TODO: Add ';' to default Fields separator set? Check RFC
+			KeyVals:  newSeparatorSet('=').Pair,
+			KeyChain: separateNoopSplit,
+			Values:   newSeparatorSet(',').Split,
 		},
 		StructParse: ConfigStructParse{TagName: "qry"},
+
 		modes: levelModes{
 			// indirect/container => update | literal => disallowed
 			LevelQuery:     setMode{},
@@ -75,9 +80,11 @@ func (c Config) NewDecoder(opts ...Option) *Decoder {
 	)
 
 	return &Decoder{
-		separators:   cfg.Separators,
-		baseModes:    cfg.modes,
-		logTrace:     cfg.LogTrace,
+		baseModes:         cfg.modes,
+		ignoreInvalidKeys: cfg.IgnoreInvalidKeys,
+		logTrace:          cfg.LogTrace,
+		separators:        cfg.Separators,
+
 		converter:    converter,
 		structParser: structParser,
 		unmarshaler:  unmarshaler,
@@ -109,6 +116,13 @@ func ConvertUnescapeAs(unescape func(string) (string, error)) Option {
 	return func(c *Config) { c.Convert.Unescape = unescape }
 }
 
+// ----- Ignore invalid keys option
+
+// IgnoreInvalidKeys TODO
+func IgnoreInvalidKeys(b bool) Option {
+	return func(c *Config) { c.IgnoreInvalidKeys = b }
+}
+
 // ----- Separator options
 
 // SeparateFieldsBy TODO
@@ -119,6 +133,11 @@ func SeparateFieldsBy(seps ...rune) Option {
 // SeparateKeyValsBy TODO
 func SeparateKeyValsBy(seps ...rune) Option {
 	return func(c *Config) { c.Separators.KeyVals = newSeparatorSet(seps...).Pair }
+}
+
+// SeparateKeyChainBy TODO
+func SeparateKeyChainBy(seps ...rune) Option {
+	return func(c *Config) { c.Separators.KeyChain = newSeparatorSet(seps...).Split }
 }
 
 // SeparateValuesBy TODO

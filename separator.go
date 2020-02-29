@@ -4,9 +4,12 @@ import "strings"
 
 // ConfigSeparate TODO
 type ConfigSeparate struct {
-	Fields, Values func(string) []string
-	KeyVals        func(string) (string, string)
+	Fields, Values, KeyChain func(string) []string
+	KeyVals                  func(string) (string, string)
 }
+
+func separateNoopSplit(s string) []string        { return []string{s} }
+func separateNoopPair(s string) (string, string) { return s, "" }
 
 type separatorSet map[rune]struct{}
 
