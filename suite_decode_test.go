@@ -38,8 +38,14 @@ func newDecodeRunner(level qry.DecodeLevel, errHook func(*testing.T, error) erro
 		errHook: errHook,
 		level:   level,
 
-		// For testing, allow literals at any level by default
-		opts: []qry.Option{qry.SetAllLevelsVia(qry.SetAllowLiteral)},
+		// Default config options for testing deviate from defaults for usage.
+		// We'll relax "strict" errors in order to cover more code paths with
+		// less config tweaking. The minority of tests designed to validate
+		// said "strict" behavior are free to tweak.
+		opts: []qry.Option{
+			qry.SetAllLevelsVia(qry.SetAllowLiteral),
+			qry.IgnoreInvalidKeys(true),
+		},
 	}
 }
 
@@ -63,7 +69,7 @@ func (dr decodeRunner) withSetOpts(setOpts ...qry.SetOption) decodeRunner {
 
 func (decodeRunner) dumpTraceOnFailure(t *testing.T, trace *qry.TraceTree) {
 	if t.Failed() {
-		t.Logf("Decode Trace:\n%s\n", trace.Sdump())
+		t.Log(trace)
 	}
 }
 
@@ -236,4 +242,8 @@ func newDecodeSuccessSuite(level qry.DecodeLevel) (res decodeSuccessSuite) {
 	}
 
 	return decodeSuccessSuite{newDecodeRunner(level, hook)}
+}
+
+func (dss decodeSuccessSuite) withKeyChainSep(r rune) decodeRunner {
+	return dss.with(qry.SeparateKeyChainBy(r))
 }

@@ -1,12 +1,9 @@
 package qry
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"os"
 	"reflect"
-	"strings"
+
+	"github.com/disiqueira/gotree"
 )
 
 // Trace TODO
@@ -63,48 +60,10 @@ type TraceTree struct{ TraceTreeNode }
 // NewTraceTree TODO
 func NewTraceTree() *TraceTree { return new(TraceTree) }
 
-func (tt *TraceTree) String() string {
-	if tt.Input == "" {
-		return "trace tree"
-	}
-
-	return fmt.Sprintf("trace tree: %s", tt.TraceTreeNode.String())
-}
-
-// Dump TODO
-func (tt TraceTree) Dump() { tt.Fdump(os.Stdout) }
-
-// Fdump TODO
-func (tt TraceTree) Fdump(w io.Writer) { dumpTree(w, LevelQuery, &tt.TraceTreeNode) }
-
-// Sdump TODO
-func (tt TraceTree) Sdump() string {
-	var buf bytes.Buffer
-	tt.Fdump(&buf)
-	return buf.String()
-}
-
-// TODO: this is wrong!
-func dumpTree(w io.Writer, parentLevel DecodeLevel, node *TraceTreeNode) {
-	adjLevel := node.Level
-	if adjLevel >= LevelValueList {
-		adjLevel--
-	}
-
-	var (
-		pad    = strings.Repeat(" ", int(parentLevel-LevelQuery))
-		offset = int(adjLevel - parentLevel)
-	)
-
-	for i := 0; i < offset; i++ {
-		fmt.Fprintf(w, "%s\\\n", pad)
-		pad = pad + " "
-	}
-
-	fmt.Fprintf(w, "%s%s\n", pad, node.String())
-	for _, child := range node.Children {
-		dumpTree(w, node.Level, child)
-	}
+func (tt TraceTree) String() string {
+	root := gotree.New("Decode Trace")
+	tt.addToStringDump(root)
+	return root.Print()
 }
 
 // TraceTreeNode TODO
@@ -123,4 +82,11 @@ func (ttn *TraceTreeNode) Child() Trace {
 	res := new(TraceTreeNode)
 	ttn.Children = append(ttn.Children, res)
 	return res
+}
+
+func (ttn TraceTreeNode) addToStringDump(dump gotree.Tree) {
+	me := dump.Add(ttn.String())
+	for _, child := range ttn.Children {
+		child.addToStringDump(me)
+	}
 }

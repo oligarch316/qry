@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // DecodeInfo TODO
@@ -45,21 +46,33 @@ type DecodeLevel int
 
 // Level TODO
 const (
-	LevelRoot DecodeLevel = iota
+	// Public levels
+	LevelInvalid DecodeLevel = iota
 	LevelQuery
 	LevelField
 	LevelKey
 	LevelValueList
 	LevelValue
+
+	// TODO: This internal level stuff makes acting on DecodeInfo annoying.
+	// Maybe try a second type like:
+	// type DecodeSetLevel|DecodePublicLevel|... DecodeLevel
+
+	// Internal levels
+	levelRoot
+	levelKeyChain
 )
 
 var decodeLevelNames = map[DecodeLevel]string{
-	LevelRoot:      "root",
+	LevelInvalid:   "invalid",
 	LevelQuery:     "query",
 	LevelField:     "field",
 	LevelKey:       "key",
 	LevelValueList: "value list",
 	LevelValue:     "value",
+
+	levelRoot:     "root",
+	levelKeyChain: "key chain",
 }
 
 func (dl DecodeLevel) String() string { return decodeLevelNames[dl] }
@@ -109,9 +122,10 @@ func ensureSettable(val reflect.Value) reflect.Value {
 
 // Decoder TODO
 type Decoder struct {
-	separators ConfigSeparate
-	baseModes  levelModes
-	logTrace   Trace
+	baseModes         levelModes
+	ignoreInvalidKeys bool
+	logTrace          Trace
+	separators        ConfigSeparate
 
 	converter    *converter
 	structParser *structParser
@@ -155,9 +169,9 @@ func (d *Decoder) Decode(level DecodeLevel, input string, v interface{}, traces 
 
 	switch {
 	case val.Kind() != reflect.Ptr:
-		return LevelRoot.newError("non-pointer target", input, val)
+		return levelRoot.newError("non-pointer target", input, val)
 	case val.IsNil():
-		return LevelRoot.newError("nil pointer target", input, val)
+		return levelRoot.newError("nil pointer target", input, val)
 	}
 
 	if d.logTrace != nil {
@@ -390,6 +404,8 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			return true, level.newError("insufficient destination array length", raw, val)
 		}
 
+		// TODO: Double check but, like struct, shouldn't need to create a new Array
+		// here if val.IsZero() is true??? Maybe??? Are arrays still reference types like slices???
 		newArray := reflect.New(val.Type()).Elem()
 
 		for i, rawItem := range rawItems {
@@ -402,8 +418,6 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		return true, nil
 
 	case reflect.Map:
-		// TODO: Any way to make all the shouldReplace checks more elegant?
-
 		var rawFields []string
 
 		switch level {
@@ -416,12 +430,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			return false, nil
 		}
 
-		var (
-			dstMap   reflect.Value
-			keyType  = val.Type().Key()
-			elemType = val.Type().Elem()
-		)
-
+		var dstMap reflect.Value
 		if shouldReplace {
 			dstMap = reflect.MakeMap(val.Type())
 		} else {
@@ -430,27 +439,13 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 
 		for _, rawField := range rawFields {
 			var (
-				newKey               = reflect.New(keyType).Elem()
 				rawKey, rawValueList = d.separators.KeyVals(rawField)
+				rawKeyChain          = d.separators.KeyChain(rawKey)
 			)
 
-			if err := d.decode(LevelKey, rawKey, newKey, state.child()); err != nil {
+			if err := d.decodeKeyChain(rawKeyChain, rawValueList, dstMap, state.child()); err != nil {
 				return true, err
 			}
-
-			elem := dstMap.MapIndex(newKey)
-			if !elem.IsValid() {
-				// Map does not contain newKey
-				elem = reflect.New(elemType).Elem()
-			} else {
-				elem = ensureSettable(elem)
-			}
-
-			if err := d.decode(LevelValueList, rawValueList, elem, state.child()); err != nil {
-				return true, err
-			}
-
-			dstMap.SetMapIndex(newKey, elem)
 		}
 
 		if shouldReplace {
@@ -460,8 +455,6 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		return true, nil
 
 	case reflect.Struct:
-		// TODO: Any way to make all the shouldReplace checks more elegant?
-
 		if level != LevelQuery && level != LevelField {
 			// Only query and field levels support structs
 			return false, nil
@@ -470,14 +463,10 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		var dstStruct reflect.Value
 
 		if shouldReplace {
+			// TODO: We don't really need to create a new struct if val.IsZero() is true here
 			dstStruct = reflect.New(val.Type()).Elem()
 		} else {
 			dstStruct = val
-		}
-
-		items, parseErr := d.structParser.parse(dstStruct)
-		if parseErr != nil {
-			return true, level.wrapError(parseErr, raw, val)
 		}
 
 		switch level {
@@ -485,23 +474,21 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			rawFields := d.separators.Fields(raw)
 			for _, rawField := range rawFields {
 				var (
-					rawKey, rawValueList      = d.separators.KeyVals(rawField)
-					unescapedKey, unescapeErr = d.converter.Unescape(rawKey)
+					rawKey, rawValueList = d.separators.KeyVals(rawField)
+					rawKeyChain          = d.separators.KeyChain(rawKey)
 				)
 
-				if unescapeErr != nil {
-					return true, level.wrapError(unescapeErr, raw, val)
-				}
-
-				if item, ok := items[unescapedKey]; ok {
-					childState := state.childWithSetMode(LevelValueList, item.setOpts)
-					if err := d.decode(LevelValueList, rawValueList, item.val, childState); err != nil {
-						return true, err
-					}
+				if err := d.decodeKeyChain(rawKeyChain, rawValueList, dstStruct, state.child()); err != nil {
+					return true, err
 				}
 			}
 
 		case LevelField:
+			items, parseErr := d.structParser.parse(dstStruct)
+			if parseErr != nil {
+				return true, level.wrapError(parseErr, raw, val)
+			}
+
 			rawKey, rawValueList := d.separators.KeyVals(raw)
 
 			// TODO: magic => constant
@@ -529,4 +516,105 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 	}
 
 	return false, nil
+}
+
+func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Value, state *decodeState) error {
+	// Shuttle work off to decode() once key chain is exhausted
+	if len(rawChain) < 1 {
+		// Note this check preceeds state.trace.Mark(...), thus eschewing
+		// state.child() is intentional
+		return d.decode(LevelValueList, raw, val, state)
+	}
+
+	// TODO: We're breaking the nice structured nature of DecodeInfo with this
+	// custom string formatting of "input"
+	//
+	// Also doing unneeded format work when trace is a no-op. Need to reconsider
+	// just checking for nil rather than a noop function for "no trace"
+	inputStr := fmt.Sprintf("%s | %s", strings.Join(rawChain, ", "), raw)
+
+	state.trace.Mark(levelKeyChain, inputStr, val)
+
+	kind := val.Kind()
+
+	if kind == reflect.Ptr {
+		if val.IsNil() {
+			val.Set(reflect.New(val.Type().Elem()))
+		}
+
+		return d.decodeKeyChain(rawChain, raw, val.Elem(), state.child())
+	}
+
+	rawKey, remainingChain := rawChain[0], rawChain[1:]
+
+	if kind == reflect.Map {
+		var (
+			valType = val.Type()
+			newKey  = reflect.New(valType.Key()).Elem()
+		)
+
+		if val.IsZero() {
+			val.Set(reflect.MakeMap(valType))
+		}
+
+		if err := d.decode(LevelKey, rawKey, newKey, state.child()); err != nil {
+			return err
+		}
+
+		elem := val.MapIndex(newKey)
+		if !elem.IsValid() {
+			// Map does not contain newKey
+			elem = reflect.New(valType.Elem()).Elem()
+		} else {
+			// NOTE/TODO?
+			// This is potentially a heavy cost?, but optimizing might be very complex
+			// (namely breaking the very useful "always .CanSet()" heuristic)
+			//
+			// Elaboration example: long chain of non-zero maps terminating in a
+			// pointer to the value list target wouldn't need all the ensureSettable
+			// calls. The final pointer makes the value list item settable.
+			elem = ensureSettable(elem)
+		}
+
+		if err := d.decodeKeyChain(remainingChain, raw, elem, state.child()); err != nil {
+			return err
+		}
+
+		val.SetMapIndex(newKey, elem)
+		return nil
+	}
+
+	if kind == reflect.Struct {
+		unescapedKey, unescapeErr := d.converter.Unescape(rawKey)
+		if unescapeErr != nil {
+			return levelKeyChain.wrapError(unescapeErr, inputStr, val)
+		}
+
+		// TODO:
+		// Struct info caching was already a priority, but the fact that this
+		// parse() call now occurs within the "for field in fields..." loop
+		// rather than outside it exacerbates the necessity.
+		items, parseErr := d.structParser.parse(val)
+		if parseErr != nil {
+			return levelKeyChain.wrapError(parseErr, inputStr, val)
+		}
+
+		item, exists := items[unescapedKey]
+		if !exists {
+			if d.ignoreInvalidKeys {
+				return nil
+			}
+
+			return levelKeyChain.newError("unknown key", inputStr, val)
+		}
+
+		childState := state.childWithSetMode(LevelValueList, item.setOpts)
+		return d.decodeKeyChain(remainingChain, raw, item.val, childState)
+	}
+
+	if d.ignoreInvalidKeys {
+		return nil
+	}
+
+	return levelKeyChain.newError("non-indexable key chain target", inputStr, val)
 }
