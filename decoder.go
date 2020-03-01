@@ -521,6 +521,8 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Value, state *decodeState) error {
 	// Shuttle work off to decode() once key chain is exhausted
 	if len(rawChain) < 1 {
+		// Note this check preceeds state.trace.Mark(...), thus eschewing
+		// state.child() is intentional
 		return d.decode(LevelValueList, raw, val, state)
 	}
 
@@ -546,15 +548,14 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 	rawKey, remainingChain := rawChain[0], rawChain[1:]
 
 	if kind == reflect.Map {
-		if val.IsZero() {
-			val.Set(reflect.MakeMap(val.Type()))
-		}
-
 		var (
-			keyType  = val.Type().Key()
-			elemType = val.Type().Elem()
-			newKey   = reflect.New(keyType).Elem()
+			valType = val.Type()
+			newKey  = reflect.New(valType.Key()).Elem()
 		)
+
+		if val.IsZero() {
+			val.Set(reflect.MakeMap(valType))
+		}
 
 		if err := d.decode(LevelKey, rawKey, newKey, state.child()); err != nil {
 			return err
@@ -563,10 +564,10 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 		elem := val.MapIndex(newKey)
 		if !elem.IsValid() {
 			// Map does not contain newKey
-			elem = reflect.New(elemType).Elem()
+			elem = reflect.New(valType.Elem()).Elem()
 		} else {
 			// NOTE/TODO?
-			// This is potentially a heavy cost, but optimizing might be very complex
+			// This is potentially a heavy cost?, but optimizing might be very complex
 			// (namely breaking the very useful "always .CanSet()" heuristic)
 			//
 			// Elaboration example: long chain of non-zero maps terminating in a

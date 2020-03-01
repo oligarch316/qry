@@ -12,7 +12,7 @@ import (
 
 // NOTE:
 // Unescape and structparser error testing when decoding structs is left
-// to the "struct family" or error tests, despite occuring with the
+// to the "struct family" of error tests, despite occuring within the
 // decodeKeyChain(...) function.
 
 func (des decodeErrorSuite) runKeyChainTests(t *testing.T) {
