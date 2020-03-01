@@ -3,16 +3,38 @@ package qry_test
 import (
 	"testing"
 
+	"github.com/oligarch316/qry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ===== Error
-func (des decodeErrorSuite) runKeyChainTests(t *testing.T) {
-	t.Skip("TODO")
 
-	// Unknown key
-	// Non-indexable target type
+// NOTE:
+// Unescape and structparser error testing when decoding structs is left
+// to the "struct family" or error tests, despite occuring with the
+// decodeKeyChain(...) function.
+
+func (des decodeErrorSuite) runKeyChainTests(t *testing.T) {
+	var (
+		input  = "keyA.keyX=val%20AX"
+		runner = des.with(
+			qry.SeparateKeyChainBy('.'),
+			qry.IgnoreInvalidKeys(false),
+		)
+	)
+
+	runner.runSubtest(t, "non-indexable target error", func(t *testing.T, decode tDecode) {
+		var target map[string]string
+		actual := decode(input, &target)
+		assertErrorMessage(t, "non-indexable key chain target", actual)
+	})
+
+	runner.runSubtest(t, "unknown key error", func(t *testing.T, decode tDecode) {
+		var target map[string]struct{ KeyOther string }
+		actual := decode(input, &target)
+		assertErrorMessage(t, "unknown key", actual)
+	})
 }
 
 // ===== Success
