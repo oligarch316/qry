@@ -8,6 +8,8 @@ import (
 
 // ===== Error
 func TestError(t *testing.T) {
+	// TODO: Test Decode(...) with invalid decode level
+
 	t.Run("query", queryErrorTests)
 	t.Run("field", fieldErrorTests)
 	t.Run("key", keyErrorTests)

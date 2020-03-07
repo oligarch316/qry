@@ -16,15 +16,31 @@ import (
 
 // ===== Config =====
 
+const (
+	configDefaultBaseTagName  = "qry"
+	configDefaultSetTagSuffix = "Set"
+	configDefaultSetTagName   = configDefaultBaseTagName + configDefaultSetTagSuffix
+)
+
+var configDefaultLevelModes = levelModes{
+	// indirect/container => update | literal => disallowed
+	LevelQuery:     setMode{},
+	LevelField:     setMode{},
+	LevelValueList: setMode{},
+
+	// indirect/container => update | literal => allowed
+	LevelKey:   setMode{AllowLiteral: true},
+	LevelValue: setMode{AllowLiteral: true},
+}
+
 // Config TODO
 type Config struct {
 	Convert           ConfigConvert
 	IgnoreInvalidKeys bool
 	LogTrace          Trace
 	Separators        ConfigSeparate
+	SetModes          SetOptionsMap
 	StructParse       ConfigStructParse
-
-	modes levelModes
 }
 
 func defaultConfig() Config {
@@ -41,17 +57,10 @@ func defaultConfig() Config {
 			KeyChain: separateNoopSplit,
 			Values:   newSeparatorSet(',').Split,
 		},
-		StructParse: ConfigStructParse{TagName: "qry"},
-
-		modes: levelModes{
-			// indirect/container => update | literal => disallowed
-			LevelQuery:     setMode{},
-			LevelField:     setMode{},
-			LevelValueList: setMode{},
-
-			// indirect/container => update | literal => allowed
-			LevelKey:   setMode{AllowLiteral: true},
-			LevelValue: setMode{AllowLiteral: true},
+		SetModes: nil,
+		StructParse: ConfigStructParse{
+			BaseTagName: configDefaultBaseTagName,
+			SetTagName:  configDefaultSetTagName,
 		},
 	}
 }
@@ -71,16 +80,21 @@ func (c Config) With(opts ...Option) Config {
 }
 
 // NewDecoder TODO
-func (c Config) NewDecoder(opts ...Option) *Decoder {
+func (c Config) NewDecoder(opts ...Option) (*Decoder, error) {
+	cfg := c.With(opts...)
+
+	if err := cfg.SetModes.validate(); err != nil {
+		return nil, err
+	}
+
 	var (
-		cfg          = c.With(opts...)
 		converter    = newConverter(cfg.Convert)
 		unmarshaler  = newUnmarshaler(converter.Unescape)
 		structParser = newStructParser(cfg.StructParse, unmarshaler.check)
 	)
 
 	return &Decoder{
-		baseModes:         cfg.modes,
+		baseModes:         configDefaultLevelModes.with(cfg.SetModes),
 		ignoreInvalidKeys: cfg.IgnoreInvalidKeys,
 		logTrace:          cfg.LogTrace,
 		separators:        cfg.Separators,
@@ -88,21 +102,13 @@ func (c Config) NewDecoder(opts ...Option) *Decoder {
 		converter:    converter,
 		structParser: structParser,
 		unmarshaler:  unmarshaler,
-	}
+	}, nil
 }
 
 // ===== Options =====
 
 // Option TODO
 type Option func(*Config)
-
-func mergeOptions(opts []Option) Option {
-	return func(c *Config) {
-		for _, opt := range opts {
-			opt(c)
-		}
-	}
-}
 
 // ----- Convert options
 
@@ -147,9 +153,32 @@ func SeparateValuesBy(seps ...rune) Option {
 
 // ----- Set mode options
 
+// SetVia TODO
+func SetVia(optsMap SetOptionsMap) Option {
+	return func(c *Config) {
+		if c.SetModes == nil {
+			c.SetModes = make(SetOptionsMap)
+		}
+
+		for level, opts := range optsMap {
+			c.SetModes[level] = append(c.SetModes[level], opts...)
+		}
+	}
+}
+
 // SetLevelVia TODO
 func SetLevelVia(level DecodeLevel, setOpts ...SetOption) Option {
-	return func(c *Config) { c.modes = c.modes.modifiedClone(level, setOpts) }
+	return SetVia(SetOptionsMap{level: setOpts})
+}
+
+// SetAllLevelsVia TODO
+func SetAllLevelsVia(setOpts ...SetOption) Option {
+	optsMap := make(SetOptionsMap)
+	for i := LevelQuery; i <= LevelValue; i++ {
+		optsMap[i] = setOpts
+	}
+
+	return SetVia(optsMap)
 }
 
 // SetQueryVia TODO
@@ -166,16 +195,6 @@ func SetValueListVia(setOpts ...SetOption) Option { return SetLevelVia(LevelValu
 
 // SetValueVia TODO
 func SetValueVia(setOpts ...SetOption) Option { return SetLevelVia(LevelValue, setOpts...) }
-
-// SetAllLevelsVia TODO
-func SetAllLevelsVia(setOpts ...SetOption) Option {
-	var opts []Option
-	for _, level := range []DecodeLevel{LevelQuery, LevelField, LevelKey, LevelValueList, LevelValue} {
-		opts = append(opts, SetLevelVia(level, setOpts...))
-	}
-
-	return mergeOptions(opts)
-}
 
 // ----- Log trace options
 
@@ -244,5 +263,8 @@ func LogToZap(logger *zap.Logger, level zapcore.Level) Option {
 
 // StructTagNameAs TODO
 func StructTagNameAs(name string) Option {
-	return func(c *Config) { c.StructParse.TagName = name }
+	return func(c *Config) {
+		c.StructParse.BaseTagName = name
+		c.StructParse.SetTagName = name + configDefaultSetTagSuffix
+	}
 }

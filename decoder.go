@@ -44,38 +44,42 @@ func (de DecodeError) Error() string {
 // DecodeLevel TODO
 type DecodeLevel int
 
+const levelInvalid DecodeLevel = 0
+
 // Level TODO
 const (
-	// Public levels
-	LevelInvalid DecodeLevel = iota
-	LevelQuery
+	LevelQuery DecodeLevel = iota + 1
 	LevelField
 	LevelKey
 	LevelValueList
 	LevelValue
 
-	// TODO: This internal level stuff makes acting on DecodeInfo annoying.
-	// Maybe try a second type like:
-	// type DecodeSetLevel|DecodePublicLevel|... DecodeLevel
-
-	// Internal levels
-	levelRoot
-	levelKeyChain
+	// Return only
+	LevelRoot
+	LevelKeyChain
 )
 
 var decodeLevelNames = map[DecodeLevel]string{
-	LevelInvalid:   "invalid",
+	levelInvalid: "invalid",
+
 	LevelQuery:     "query",
 	LevelField:     "field",
 	LevelKey:       "key",
 	LevelValueList: "value list",
 	LevelValue:     "value",
 
-	levelRoot:     "root",
-	levelKeyChain: "key chain",
+	LevelRoot:     "root",
+	LevelKeyChain: "key chain",
 }
 
-func (dl DecodeLevel) String() string { return decodeLevelNames[dl] }
+func (dl DecodeLevel) String() string {
+	if name, ok := decodeLevelNames[dl]; ok {
+		return name
+	}
+	return decodeLevelNames[levelInvalid]
+}
+
+func (dl DecodeLevel) validInput() bool { return dl > levelInvalid && dl < LevelRoot }
 
 func (dl DecodeLevel) newDefault() reflect.Value {
 	switch dl {
@@ -133,7 +137,7 @@ type Decoder struct {
 }
 
 // NewDecoder TODO: friendly.go
-func NewDecoder(opts ...Option) *Decoder { return NewConfig().NewDecoder(opts...) }
+func NewDecoder(opts ...Option) (*Decoder, error) { return NewConfig().NewDecoder(opts...) }
 
 // Unescape TODO: friendly.go
 func (d *Decoder) Unescape(s string) (string, error) { return d.converter.Unescape(s) }
@@ -168,10 +172,12 @@ func (d *Decoder) Decode(level DecodeLevel, input string, v interface{}, traces 
 	val := reflect.ValueOf(v)
 
 	switch {
+	case !level.validInput():
+		return LevelRoot.newError("invalid decode level: "+level.String(), input, val)
 	case val.Kind() != reflect.Ptr:
-		return levelRoot.newError("non-pointer target", input, val)
+		return LevelRoot.newError("non-pointer target", input, val)
 	case val.IsNil():
-		return levelRoot.newError("nil pointer target", input, val)
+		return LevelRoot.newError("nil pointer target", input, val)
 	}
 
 	if d.logTrace != nil {
@@ -493,7 +499,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 
 			// TODO: magic => constant
 			if item, ok := items["key"]; ok {
-				childState := state.childWithSetMode(LevelKey, item.setOpts)
+				childState := state.childWithSetOpts(item.SetOptions(LevelKey))
 				if err := d.decode(LevelKey, rawKey, item.val, childState); err != nil {
 					return true, err
 				}
@@ -501,7 +507,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 
 			// TODO: magic => constant
 			if item, ok := items["values"]; ok {
-				childState := state.childWithSetMode(LevelValueList, item.setOpts)
+				childState := state.childWithSetOpts(item.SetOptions(LevelValueList))
 				if err := d.decode(LevelValueList, rawValueList, item.val, childState); err != nil {
 					return true, err
 				}
@@ -533,7 +539,7 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 	// just checking for nil rather than a noop function for "no trace"
 	inputStr := fmt.Sprintf("%s | %s", strings.Join(rawChain, ", "), raw)
 
-	state.trace.Mark(levelKeyChain, inputStr, val)
+	state.trace.Mark(LevelKeyChain, inputStr, val)
 
 	kind := val.Kind()
 
@@ -587,7 +593,7 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 	if kind == reflect.Struct {
 		unescapedKey, unescapeErr := d.converter.Unescape(rawKey)
 		if unescapeErr != nil {
-			return levelKeyChain.wrapError(unescapeErr, inputStr, val)
+			return LevelKeyChain.wrapError(unescapeErr, inputStr, val)
 		}
 
 		// TODO:
@@ -596,7 +602,7 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 		// rather than outside it exacerbates the necessity.
 		items, parseErr := d.structParser.parse(val)
 		if parseErr != nil {
-			return levelKeyChain.wrapError(parseErr, inputStr, val)
+			return LevelKeyChain.wrapError(parseErr, inputStr, val)
 		}
 
 		item, exists := items[unescapedKey]
@@ -605,10 +611,10 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 				return nil
 			}
 
-			return levelKeyChain.newError("unknown key", inputStr, val)
+			return LevelKeyChain.newError("unknown key", inputStr, val)
 		}
 
-		childState := state.childWithSetMode(LevelValueList, item.setOpts)
+		childState := state.childWithSetOpts(item.SetOptions(LevelValueList))
 		return d.decodeKeyChain(remainingChain, raw, item.val, childState)
 	}
 
@@ -616,5 +622,5 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 		return nil
 	}
 
-	return levelKeyChain.newError("non-indexable key chain target", inputStr, val)
+	return LevelKeyChain.newError("non-indexable key chain target", inputStr, val)
 }
