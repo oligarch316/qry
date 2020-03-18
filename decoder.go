@@ -424,14 +424,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 		return true, nil
 
 	case reflect.Map:
-		var rawFields []string
-
-		switch level {
-		case LevelQuery:
-			rawFields = d.separators.Fields(raw)
-		case LevelField:
-			rawFields = []string{raw}
-		default:
+		if level != LevelQuery && level != LevelField {
 			// Only query and field levels support maps
 			return false, nil
 		}
@@ -443,15 +436,43 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			dstMap = val
 		}
 
-		for _, rawField := range rawFields {
+		switch level {
+		case LevelQuery:
+			// Query level supports key chaining => use decodeKeyChain(...)
+			for _, rawField := range d.separators.Fields(raw) {
+				var (
+					rawKey, rawValueList = d.separators.KeyVals(rawField)
+					rawKeyChain          = d.separators.KeyChain(rawKey)
+				)
+
+				if err := d.decodeKeyChain(rawKeyChain, rawValueList, dstMap, state.child()); err != nil {
+					return true, err
+				}
+			}
+		case LevelField:
+			// Field level does NOT support key chaining => decode directly into key/valueList levels
 			var (
-				rawKey, rawValueList = d.separators.KeyVals(rawField)
-				rawKeyChain          = d.separators.KeyChain(rawKey)
+				newKey               = reflect.New(val.Type().Key()).Elem()
+				rawKey, rawValueList = d.separators.KeyVals(raw)
 			)
 
-			if err := d.decodeKeyChain(rawKeyChain, rawValueList, dstMap, state.child()); err != nil {
+			if err := d.decode(LevelKey, rawKey, newKey, state.child()); err != nil {
 				return true, err
 			}
+
+			elem := dstMap.MapIndex(newKey)
+			if !elem.IsValid() {
+				// Map does not contain newKey
+				elem = reflect.New(val.Type().Elem()).Elem()
+			} else {
+				elem = ensureSettable(elem)
+			}
+
+			if err := d.decode(LevelValueList, rawValueList, elem, state.child()); err != nil {
+				return true, err
+			}
+
+			dstMap.SetMapIndex(newKey, elem)
 		}
 
 		if shouldReplace {
@@ -477,8 +498,8 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 
 		switch level {
 		case LevelQuery:
-			rawFields := d.separators.Fields(raw)
-			for _, rawField := range rawFields {
+			// Query level supports key chaining => use decodeKeyChain(...)
+			for _, rawField := range d.separators.Fields(raw) {
 				var (
 					rawKey, rawValueList = d.separators.KeyVals(rawField)
 					rawKeyChain          = d.separators.KeyChain(rawKey)
@@ -490,6 +511,7 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 			}
 
 		case LevelField:
+			// Field level does NOT support key chaining => decode directly into key/valueList levels
 			items, parseErr := d.structParser.parse(dstStruct)
 			if parseErr != nil {
 				return true, level.wrapError(parseErr, raw, val)

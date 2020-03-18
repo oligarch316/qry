@@ -46,9 +46,7 @@ func queryErrorTests(t *testing.T) {
 		})
 	})
 
-	if !testing.Short() {
-		t.Run("key chain", suite.runKeyChainTests)
-	}
+	t.Run("key chain", suite.runKeyChainTests)
 }
 
 func fieldErrorTests(t *testing.T) {
@@ -68,8 +66,6 @@ func fieldErrorTests(t *testing.T) {
 	t.Run("container", func(t *testing.T) {
 		t.Run("struct", suite.runStructParseTests)
 	})
-
-	t.Run("key chain", suite.runKeyChainTests)
 }
 
 func keyErrorTests(t *testing.T) {
@@ -172,7 +168,7 @@ func runQuerySuccessTests(t *testing.T) {
 		t.Run("struct", suite.runStructQueryTests)
 	})
 
-	t.Run("key chain", suite.runKeyChainQueryTests)
+	t.Run("key chain", suite.runKeyChainTests)
 }
 
 func runFieldSuccessTests(t *testing.T) {
@@ -207,8 +203,6 @@ func runFieldSuccessTests(t *testing.T) {
 
 		t.Run("struct", suite.runStructFieldTests)
 	})
-
-	t.Run("key chain", suite.runKeyChainFieldTests)
 }
 
 func runKeySuccessTests(t *testing.T) {
