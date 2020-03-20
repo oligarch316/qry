@@ -14,8 +14,7 @@ const (
 	sTagOmit       = "-"
 	sTagOmitEscape = sTagOmit + sTagSep
 
-	sTagBaseEmbed   = "embed"
-	sTagBaseRequire = "require"
+	sTagBaseEmbed = "embed"
 
 	sTagSetSep = "="
 )
@@ -87,8 +86,8 @@ func (fi fieldInfo) String() string {
 }
 
 type baseTagInfo struct {
-	TagName                       string
-	TagEmbed, TagOmit, TagRequire bool
+	TagName           string
+	TagEmbed, TagOmit bool
 }
 
 func (bti *baseTagInfo) parse(raw string) error {
@@ -110,24 +109,17 @@ func (bti *baseTagInfo) parse(raw string) error {
 	bti.TagName, items = items[0], items[1:]
 
 	for _, item := range items {
-		switch item {
-		case sTagBaseEmbed:
+		if item == sTagBaseEmbed {
 			bti.TagEmbed = true
-		case sTagBaseRequire:
-			bti.TagRequire = true
-		default:
-			return fmt.Errorf("invalid base tag directive '%s'", item)
+			continue
 		}
+
+		return fmt.Errorf("invalid base tag directive '%s'", item)
 	}
 
 	// Ensure no incompatible tag directives
-	if bti.TagEmbed {
-		switch {
-		case bti.TagName != "":
-			return errors.New("mutually exclusive base tag directive 'embed' and non-empty name")
-		case bti.TagRequire:
-			return errors.New("mutually exclusive base tag directives 'embed' and 'require'")
-		}
+	if bti.TagEmbed && bti.TagName != "" {
+		return errors.New("mutually exclusive base tag directive 'embed' and non-empty name")
 	}
 
 	return nil

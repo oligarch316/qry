@@ -54,14 +54,6 @@ func (des decodeErrorSuite) runStructParseTagSubtests(t *testing.T) {
 			actual := decode("xyz", &target)
 			assertErrorMessage(t, "mutually exclusive base tag directive 'embed' and non-empty name", actual)
 		})
-
-		des.runSubtest(t, "embed and require", func(t *testing.T, decode tDecode) {
-			var target struct {
-				Embedded struct{ Key string } `qry:",embed,require"`
-			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "mutually exclusive base tag directives 'embed' and 'require'", actual)
-		})
 	})
 
 	t.Run("set", func(t *testing.T) {
