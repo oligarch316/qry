@@ -24,74 +24,152 @@ func (des decodeErrorSuite) runStructUnescapeTests(t *testing.T) {
 }
 
 func (des decodeErrorSuite) runStructParseTests(t *testing.T) {
-	t.Run("explicit embed", func(t *testing.T) {
-		des.runSubtest(t, "non-empty tag name", func(t *testing.T, decode tDecode) {
+	t.Run("tag", des.runStructParseTagSubtests)
+	t.Run("explicit embed", des.runStructParseExplicitEmbedSubtests)
+	t.Run("tagged invalid", des.runStructParseTaggedInvalidSubtests)
+}
+
+func (des decodeErrorSuite) runStructParseTagSubtests(t *testing.T) {
+	t.Run("base", func(t *testing.T) {
+		des.runSubtest(t, "empty", func(t *testing.T, decode tDecode) {
 			var target struct {
-				Embedded struct{ Key string } `qry:"key,embed"`
+				Key string `qry:""`
 			}
 			actual := decode("xyz", &target)
-			assertErrorMessage(t, "mutually exclusive non-empty name and embed directives", actual)
+			assertErrorMessage(t, "empty base tag", actual)
 		})
 
-		des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+		des.runSubtest(t, "unknown directive", func(t *testing.T, decode tDecode) {
 			var target struct {
-				embedded struct{ Key string } `qry:",embed"`
+				Key string `qry:",nonDirective"`
 			}
 			actual := decode("xyz", &target)
-			assertErrorMessage(t, "embed directive on non-anonymous unexported field", actual)
+			assertErrorMessage(t, "invalid base tag directive 'nonDirective'", actual)
 		})
 
-		des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+		des.runSubtest(t, "embed and non-empty name", func(t *testing.T, decode tDecode) {
 			var target struct {
-				*tStructError `qry:",embed"`
+				Embedded struct{ Key string } `qry:"keyA,embed"`
 			}
 			actual := decode("xyz", &target)
-			assertErrorMessage(t, "embed directive on unexported pointer field", actual)
-		})
-
-		des.runSubtest(t, "non-pointer non-struct", func(t *testing.T, decode tDecode) {
-			var target struct {
-				Key string `qry:",embed"`
-			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "embed directive on invalid type", actual)
-		})
-
-		des.runSubtest(t, "pointer to non-struct", func(t *testing.T, decode tDecode) {
-			var target struct {
-				Embedded *string `qry:",embed"`
-			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "embed directive on invalid type", actual)
+			assertErrorMessage(t, "mutually exclusive base tag directive 'embed' and non-empty name", actual)
 		})
 	})
 
-	t.Run("non-empty tag name", func(t *testing.T) {
-		des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+	t.Run("set", func(t *testing.T) {
+		des.runSubtest(t, "empty", func(t *testing.T, decode tDecode) {
 			var target struct {
-				myKey string `qry:"key"`
+				Key string `qrySet:""`
 			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "empty set tag", actual)
 		})
 
-		des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+		des.runSubtest(t, "unknown default option", func(t *testing.T, decode tDecode) {
 			var target struct {
-				*tStructError `qry:"key"`
+				Key string `qrySet:"nonSetOpt"`
 			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "invalid set tag option 'nonSetOpt'", actual)
 		})
 
-		des.runSubtest(t, "pathological anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
+		des.runSubtest(t, "unknown explicit option", func(t *testing.T, decode tDecode) {
 			var target struct {
-				Embedded struct {
-					tStructErrorUnmarshaler `qry:"key"`
-				} `qry:",embed"`
+				Key string `qrySet:"valueList=nonSetOpt"`
 			}
-			actual := decode("xyz", &target)
-			assertErrorMessage(t, "non-empty name directive on unexported field", actual)
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "invalid set tag option 'nonSetOpt'", actual)
 		})
+
+		des.runSubtest(t, "unknown explicit level", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Key string `qrySet:"nonLevel=allowLiteral"`
+			}
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "invalid set tag level 'nonLevel'", actual)
+		})
+	})
+
+	t.Run("combined", func(t *testing.T) {
+		des.runSubtest(t, "omit and set options", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Key string `qry:"-" qrySet:"allowLiteral"`
+			}
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "mutually exclusive base tag name '-' (omit) and set tag options", actual)
+		})
+
+		des.runSubtest(t, "embed and set options", func(t *testing.T, decode tDecode) {
+			var target struct {
+				Embedded struct{ Key string } `qry:",embed" qrySet:"allowLiteral"`
+			}
+			actual := decode("xzy", &target)
+			assertErrorMessage(t, "mutually exclusive base tag directive 'embed' and set tag options", actual)
+		})
+	})
+}
+
+func (des decodeErrorSuite) runStructParseExplicitEmbedSubtests(t *testing.T) {
+	des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+		var target struct {
+			embedded struct{ Key string } `qry:",embed"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "'embed' directive on non-anonymous unexported field", actual)
+	})
+
+	des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+		var target struct {
+			*tStructError `qry:",embed"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "'embed' directive on unexported pointer field", actual)
+	})
+
+	des.runSubtest(t, "non-pointer non-struct", func(t *testing.T, decode tDecode) {
+		var target struct {
+			Key string `qry:",embed"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "'embed' directive on invalid type", actual)
+	})
+
+	des.runSubtest(t, "pointer to non-struct", func(t *testing.T, decode tDecode) {
+		var target struct {
+			Embedded *string `qry:",embed"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, "'embed' directive on invalid type", actual)
+	})
+}
+
+func (des decodeErrorSuite) runStructParseTaggedInvalidSubtests(t *testing.T) {
+	expected := "tag on unexported field"
+
+	des.runSubtest(t, "non-anonymous unexported", func(t *testing.T, decode tDecode) {
+		var target struct {
+			myKey string `qry:"key"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, expected, actual)
+	})
+
+	des.runSubtest(t, "anonymous unexported pointer", func(t *testing.T, decode tDecode) {
+		var target struct {
+			*tStructError `qry:"key"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, expected, actual)
+	})
+
+	des.runSubtest(t, "pathological anonymous unexported unmarshaler", func(t *testing.T, decode tDecode) {
+		var target struct {
+			Embedded struct {
+				tStructErrorUnmarshaler `qry:"key"`
+			} `qry:",embed"`
+		}
+		actual := decode("xyz", &target)
+		assertErrorMessage(t, expected, actual)
 	})
 }
 
@@ -227,16 +305,16 @@ func (dss decodeSuccessSuite) runStructQueryUpdateSubtests(t *testing.T) {
 func (dss decodeSuccessSuite) runStructQueryOmittedSubtest(t *testing.T) {
 	dss.runTest(t, func(t *testing.T, decode tDecode) {
 		var (
-			input  = "keyA=val%20A&keyB=val%20B"
+			input  = "keyA=val%20A&-=val%20hyphen"
 			target struct {
 				KeyA string `qry:"-"`
-				KeyB string `qry:"-"`
+				KeyB string `qry:"-,"`
 			}
 		)
 
 		decode(input, &target)
 		assert.Equal(t, "", target.KeyA)
-		assert.Equal(t, "", target.KeyB)
+		assert.Equal(t, "val hyphen", target.KeyB)
 	})
 }
 

@@ -75,10 +75,10 @@ func (decodeRunner) dumpTraceOnFailure(t *testing.T, trace *qry.TraceTree) {
 
 func (dr decodeRunner) runTest(t *testing.T, test decodeTest) {
 	// Setup
-	var (
-		decoder = qry.NewDecoder(dr.opts...)
-		trace   = qry.NewTraceTree()
-	)
+	decoder, err := qry.NewDecoder(dr.opts...)
+	require.NoError(t, err, "decoder creation")
+
+	trace := qry.NewTraceTree()
 
 	// Teardown
 	if testing.Verbose() {

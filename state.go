@@ -1,17 +1,27 @@
 package qry
 
+import "fmt"
+
 // SetOption TODO
 type SetOption string
 
 // Set TODO
 const (
 	SetAllowLiteral     SetOption = "allowLiteral"
-	SetDisallowLiteral  SetOption = "diallowLiteral"
+	SetDisallowLiteral  SetOption = "disallowLiteral"
 	SetReplaceContainer SetOption = "replaceContainer"
 	SetUpdateContainer  SetOption = "updateCoantainer"
 	SetReplaceIndirect  SetOption = "replaceIndirect"
 	SetUpdateIndirect   SetOption = "updateIndirect"
 )
+
+func (so SetOption) valid() bool {
+	switch so {
+	case SetAllowLiteral, SetDisallowLiteral, SetReplaceIndirect, SetUpdateIndirect, SetReplaceContainer, SetUpdateContainer:
+		return true
+	}
+	return false
+}
 
 type setMode struct{ AllowLiteral, ReplaceContainer, ReplaceIndirect bool }
 
@@ -34,19 +44,31 @@ func (sm *setMode) modify(opts []SetOption) {
 	}
 }
 
+// SetOptionsMap TODO
+type SetOptionsMap map[DecodeLevel][]SetOption
+
+func (som SetOptionsMap) validate() error {
+	for level := range som {
+		if !level.validInput() {
+			return fmt.Errorf("invalid set level: %s", level)
+		}
+	}
+	return nil
+}
+
 type levelModes map[DecodeLevel]setMode
 
-func (lm levelModes) modifiedClone(level DecodeLevel, opts []SetOption) levelModes {
-	if len(opts) < 1 {
+func (lm levelModes) with(optsMap SetOptionsMap) levelModes {
+	if len(optsMap) < 1 {
 		return lm
 	}
 
 	res := make(levelModes)
-	for lvl, mode := range lm {
-		if lvl == level {
+	for level, mode := range lm {
+		if opts, ok := optsMap[level]; ok {
 			mode.modify(opts)
 		}
-		res[lvl] = mode
+		res[level] = mode
 	}
 	return res
 }
@@ -63,9 +85,9 @@ func (ds *decodeState) child() *decodeState {
 	}
 }
 
-func (ds *decodeState) childWithSetMode(level DecodeLevel, opts []SetOption) *decodeState {
+func (ds *decodeState) childWithSetOpts(optsMap SetOptionsMap) *decodeState {
 	return &decodeState{
-		modes: ds.modes.modifiedClone(level, opts),
+		modes: ds.modes.with(optsMap),
 		trace: ds.trace.Child(),
 	}
 }

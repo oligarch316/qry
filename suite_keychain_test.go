@@ -39,14 +39,13 @@ func (des decodeErrorSuite) runKeyChainTests(t *testing.T) {
 
 // ===== Success
 
-// ----- Query
-func (dss decodeSuccessSuite) runKeyChainQueryTests(t *testing.T) {
-	t.Run("map chain", dss.runKeyChainQueryMapSubtests)
-	t.Run("struct chain", dss.runKeyChainQueryStructSubtests)
-	t.Run("mixed chain", dss.runKeyChainQueryMixedSubtests)
+func (dss decodeSuccessSuite) runKeyChainTests(t *testing.T) {
+	t.Run("map chain", dss.runKeyChainMapSubtests)
+	t.Run("struct chain", dss.runKeyChainStructSubtests)
+	t.Run("mixed chain", dss.runKeyChainMixedSubtests)
 }
 
-func (dss decodeSuccessSuite) runKeyChainQueryMapSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runKeyChainMapSubtests(t *testing.T) {
 	var (
 		input  = "keyA.keyX=val%20AX&keyB.keyX=val%20BX"
 		runner = dss.withKeyChainSep('.')
@@ -128,21 +127,21 @@ func (dss decodeSuccessSuite) runKeyChainQueryMapSubtests(t *testing.T) {
 }
 
 type (
-	tKeyChainQueryXY struct {
+	tKeyChainXY struct {
 		KeyX string
 		KeyY *string
 	}
 
-	tKeyChainQueryEmbeddedC struct{ KeyC tKeyChainQueryXY }
+	tKeyChainEmbeddedC struct{ KeyC tKeyChainXY }
 
-	tKeyChainQueryAB struct {
-		KeyA tKeyChainQueryXY
-		KeyB *tKeyChainQueryXY
-		tKeyChainQueryEmbeddedC
+	tKeyChainAB struct {
+		KeyA tKeyChainXY
+		KeyB *tKeyChainXY
+		tKeyChainEmbeddedC
 	}
 )
 
-func (dss decodeSuccessSuite) runKeyChainQueryStructSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runKeyChainStructSubtests(t *testing.T) {
 	var (
 		input = "keyA.keyX=val%20AX&keyA.keyY=val%20AY" +
 			"&keyB.keyX=val%20BX&keyB.keyY=val%20BY" +
@@ -155,18 +154,18 @@ func (dss decodeSuccessSuite) runKeyChainQueryStructSubtests(t *testing.T) {
 		var (
 			originalAY, originalBY, originalCY = "orig AY", "orig BY", "orig CY"
 
-			originalB = tKeyChainQueryXY{
+			originalB = tKeyChainXY{
 				KeyX: "orig BX",
 				KeyY: &originalBY,
 			}
-			target = tKeyChainQueryAB{
-				KeyA: tKeyChainQueryXY{
+			target = tKeyChainAB{
+				KeyA: tKeyChainXY{
 					KeyX: "orig AX",
 					KeyY: &originalAY,
 				},
 				KeyB: &originalB,
-				tKeyChainQueryEmbeddedC: tKeyChainQueryEmbeddedC{
-					KeyC: tKeyChainQueryXY{
+				tKeyChainEmbeddedC: tKeyChainEmbeddedC{
+					KeyC: tKeyChainXY{
 						KeyX: "orig CX",
 						KeyY: &originalCY,
 					},
@@ -207,7 +206,7 @@ func (dss decodeSuccessSuite) runKeyChainQueryStructSubtests(t *testing.T) {
 	})
 }
 
-func (dss decodeSuccessSuite) runKeyChainQueryMixedSubtests(t *testing.T) {
+func (dss decodeSuccessSuite) runKeyChainMixedSubtests(t *testing.T) {
 	var (
 		input  = "keyA.keyX=val%20AX"
 		runner = dss.withKeyChainSep('.')
@@ -249,41 +248,5 @@ func (dss decodeSuccessSuite) runKeyChainQueryMixedSubtests(t *testing.T) {
 		require.Equal(t, expected, target)
 		assert.Equal(t, "val AX", originalAX)
 		assert.Equal(t, "orig AY", originalAY)
-	})
-}
-
-// ----- Field
-func (dss decodeSuccessSuite) runKeyChainFieldTests(t *testing.T) {
-	// NOTE:
-	// Just the basics for field level. Leave complex cases to the query level
-	// for test brevity.
-
-	var (
-		input  = "keyA.keyX=val%20AX"
-		runner = dss.withKeyChainSep('.')
-	)
-
-	runner.runSubtest(t, "basic map chain", func(t *testing.T, decode tDecode) {
-		var (
-			target   map[string]map[string]string
-			expected = map[string]map[string]string{
-				"keyA": map[string]string{"keyX": "val AX"},
-			}
-		)
-
-		decode(input, &target)
-		assert.Equal(t, expected, target)
-	})
-
-	runner.runSubtest(t, "basic mixed chain", func(t *testing.T, decode tDecode) {
-		var (
-			target   map[string]struct{ KeyX string }
-			expected = map[string]struct{ KeyX string }{
-				"keyA": struct{ KeyX string }{KeyX: "val AX"},
-			}
-		)
-
-		decode(input, &target)
-		assert.Equal(t, expected, target)
 	})
 }
