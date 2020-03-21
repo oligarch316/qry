@@ -197,21 +197,58 @@ func (sti *setTagInfo) parseExplicitOpt(rawLevel, rawOpt string) error {
 // ConfigStructParse TODO
 type ConfigStructParse struct{ BaseTagName, SetTagName string }
 
-type structItem struct {
-	val reflect.Value
-	setTagInfo
+type (
+	idxChainItem struct {
+		idx int
+		ptr bool
+	}
+
+	fieldItem struct {
+		idxChain []idxChainItem
+		setTagInfo
+	}
+)
+
+func (fi fieldItem) lookup(val reflect.Value) reflect.Value {
+	for _, chainItem := range fi.idxChain {
+		val = val.Field(chainItem.idx)
+		if chainItem.ptr {
+			if val.IsNil() {
+				val.Set(reflect.New(val.Type().Elem()))
+			}
+			val = val.Elem()
+		}
+	}
+	return val
 }
+
+type structItem map[string]fieldItem
 
 type structParser struct {
 	ConfigStructParse
+
+	cache            map[reflect.Type]structItem
 	checkUnmarshaler func(reflect.Type) bool
 }
 
 func newStructParser(cfg ConfigStructParse, checkUnmarshaler func(reflect.Type) bool) *structParser {
 	return &structParser{
 		ConfigStructParse: cfg,
+		cache:             make(map[reflect.Type]structItem),
 		checkUnmarshaler:  checkUnmarshaler,
 	}
+}
+
+func (sp structParser) canUnmarshal(sfi *StructFieldInfo) bool {
+	/*
+			NOTE:
+			1. We cannot take the .Interface() of unexported fields, so for our
+		       purposes, all unexported fields are not unmarshalers
+			2. Root struct heuristacally addressable
+		       ==implies=> field is addressable
+		       ==implies=> PtrTo check required
+	*/
+	return !sfi.Exported && (sp.checkUnmarshaler(sfi.Type) || sp.checkUnmarshaler(reflect.PtrTo(sfi.Type)))
 }
 
 func (sp structParser) parseField(field reflect.StructField) (*StructFieldInfo, error) {
@@ -255,36 +292,43 @@ func (sp structParser) parseField(field reflect.StructField) (*StructFieldInfo, 
 	return res, nil
 }
 
-func (sp structParser) canUnmarshal(sfi *StructFieldInfo) bool {
-	/*
-			NOTE:
-			1. We cannot take the .Interface() of unexported fields, so for our
-		       purposes, all unexported fields are not unmarshalers
-			2. Root struct heuristacally addressable
-		       ==implies=> field is addressable
-		       ==implies=> PtrTo check required
-	*/
-	return !sfi.Exported && (sp.checkUnmarshaler(sfi.Type) || sp.checkUnmarshaler(reflect.PtrTo(sfi.Type)))
+func (sp structParser) load(sType reflect.Type) (res structItem, err error) {
+	var cached bool
+	if res, cached = sp.cache[sType]; !cached {
+		if res, err = sp.parse(sType); err == nil {
+			sp.cache[sType] = res
+		}
+	}
+	return
 }
 
-func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
+type parseItem struct {
+	sType    reflect.Type
+	idxChain []idxChainItem
+}
+
+func (pi parseItem) child(sType reflect.Type, chainItem idxChainItem) parseItem {
+	return parseItem{
+		sType:    sType,
+		idxChain: append(pi.idxChain, chainItem),
+	}
+}
+
+func (sp structParser) parse(sType reflect.Type) (structItem, error) {
 	var (
-		workList = []reflect.Value{val}
-		res      = make(map[string]structItem)
+		workList = []parseItem{parseItem{sType: sType}}
+		res      = make(structItem)
 	)
 
 	for len(workList) > 0 {
-		// Pop next item (heuristic: guarenteed kind of reflect.Struct)
+		// Pop next item (heuristic: guarenteed sType kind of reflect.Struct)
 		workItem := workList[0]
 		workList = workList[1:]
 
-		var (
-			sType   = workItem.Type()
-			nFields = sType.NumField()
-		)
+		nFields := workItem.sType.NumField()
 
 		for i := 0; i < nFields; i++ {
-			fieldInfo, fieldErr := sp.parseField(sType.Field(i))
+			fieldInfo, fieldErr := sp.parseField(workItem.sType.Field(i))
 			switch {
 			case fieldErr != nil:
 				return nil, fieldErr
@@ -308,32 +352,27 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 					return nil, fieldInfo.newError("'embed' directive on non-anonymous unexported field")
 				}
 
-				switch fieldInfo.Type.Kind() {
-				case reflect.Struct:
-					// Unexported structs are fine as we can work with their zero values directly
-					workList = append(workList, workItem.Field(i))
-					continue
-				case reflect.Ptr:
+				var (
+					newType      = fieldInfo.Type
+					newChainItem = idxChainItem{idx: i}
+				)
+
+				if newType.Kind() == reflect.Ptr {
 					if !fieldInfo.Exported {
 						// Unexported pointers are not ok, as we need to set them if they're nil (zero value)
 						return nil, fieldInfo.newError("'embed' directive on unexported pointer field")
 					}
 
-					elemType := fieldInfo.Type.Elem()
-					if elemType.Kind() != reflect.Struct {
-						return nil, fieldInfo.newError("'embed' directive on invalid type")
-					}
-
-					ptrVal := workItem.Field(i)
-					if ptrVal.IsNil() {
-						ptrVal.Set(reflect.New(elemType))
-					}
-
-					workList = append(workList, ptrVal.Elem())
-					continue
+					newType = newType.Elem()
+					newChainItem.ptr = true
 				}
 
-				return nil, fieldInfo.newError("'embed' directive on invalid type")
+				if newType.Kind() != reflect.Struct {
+					return nil, fieldInfo.newError("'embed' directive on invalid type")
+				}
+
+				workList = append(workList, workItem.child(newType, newChainItem))
+				continue
 			}
 
 			// Possible implicit embed
@@ -349,18 +388,15 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 
 				switch fieldInfo.Type.Kind() {
 				case reflect.Struct:
-					workList = append(workList, workItem.Field(i))
+					newWorkItem := workItem.child(fieldInfo.Type, idxChainItem{idx: i})
+					workList = append(workList, newWorkItem)
 					continue
 				case reflect.Ptr:
 					if fieldInfo.Exported {
 						elemType := fieldInfo.Type.Elem()
 						if elemType.Kind() == reflect.Struct {
-							ptrVal := workItem.Field(i)
-							if ptrVal.IsNil() {
-								ptrVal.Set(reflect.New(elemType))
-							}
-
-							workList = append(workList, ptrVal.Elem())
+							newWorkItem := workItem.child(elemType, idxChainItem{idx: i, ptr: true})
+							workList = append(workList, newWorkItem)
 							continue
 						}
 					}
@@ -383,8 +419,8 @@ func (sp structParser) parse(val reflect.Value) (map[string]structItem, error) {
 			// https://golang.org/src/encoding/json/encode.go#L1196
 			// for inspiration. depth > from tag > index sounds right.
 			if _, collision := res[decodeName]; !collision {
-				res[decodeName] = structItem{
-					val:        workItem.Field(i),
+				res[decodeName] = fieldItem{
+					idxChain:   append(workItem.idxChain, idxChainItem{idx: i}),
 					setTagInfo: fieldInfo.setTagInfo,
 				}
 			}

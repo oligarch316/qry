@@ -512,25 +512,25 @@ func (d *Decoder) handleContainers(level DecodeLevel, raw string, val reflect.Va
 
 		case LevelField:
 			// Field level does NOT support key chaining => decode directly into key/valueList levels
-			items, parseErr := d.structParser.parse(dstStruct)
-			if parseErr != nil {
-				return true, level.wrapError(parseErr, raw, val)
+			sItem, loadErr := d.structParser.load(dstStruct.Type())
+			if loadErr != nil {
+				return true, level.wrapError(loadErr, raw, val)
 			}
 
 			rawKey, rawValueList := d.separators.KeyVals(raw)
 
 			// TODO: magic => constant
-			if item, ok := items["key"]; ok {
-				childState := state.childWithSetOpts(item.SetOptions(LevelKey))
-				if err := d.decode(LevelKey, rawKey, item.val, childState); err != nil {
+			if keyItem, ok := sItem["key"]; ok {
+				childState := state.childWithSetOpts(keyItem.SetOptions(LevelKey))
+				if err := d.decode(LevelKey, rawKey, keyItem.lookup(dstStruct), childState); err != nil {
 					return true, err
 				}
 			}
 
 			// TODO: magic => constant
-			if item, ok := items["values"]; ok {
-				childState := state.childWithSetOpts(item.SetOptions(LevelValueList))
-				if err := d.decode(LevelValueList, rawValueList, item.val, childState); err != nil {
+			if valsItem, ok := sItem["values"]; ok {
+				childState := state.childWithSetOpts(valsItem.SetOptions(LevelValueList))
+				if err := d.decode(LevelValueList, rawValueList, valsItem.lookup(dstStruct), childState); err != nil {
 					return true, err
 				}
 			}
@@ -618,16 +618,12 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 			return LevelKeyChain.wrapError(unescapeErr, inputStr, val)
 		}
 
-		// TODO:
-		// Struct info caching was already a priority, but the fact that this
-		// parse() call now occurs within the "for field in fields..." loop
-		// rather than outside it exacerbates the necessity.
-		items, parseErr := d.structParser.parse(val)
-		if parseErr != nil {
-			return LevelKeyChain.wrapError(parseErr, inputStr, val)
+		sItem, loadErr := d.structParser.load(val.Type())
+		if loadErr != nil {
+			return LevelKeyChain.wrapError(loadErr, inputStr, val)
 		}
 
-		item, exists := items[unescapedKey]
+		fItem, exists := sItem[unescapedKey]
 		if !exists {
 			if d.ignoreInvalidKeys {
 				return nil
@@ -636,8 +632,8 @@ func (d *Decoder) decodeKeyChain(rawChain []string, raw string, val reflect.Valu
 			return LevelKeyChain.newError("unknown key", inputStr, val)
 		}
 
-		childState := state.childWithSetOpts(item.SetOptions(LevelValueList))
-		return d.decodeKeyChain(remainingChain, raw, item.val, childState)
+		childState := state.childWithSetOpts(fItem.SetOptions(LevelValueList))
+		return d.decodeKeyChain(remainingChain, raw, fItem.lookup(val), childState)
 	}
 
 	if d.ignoreInvalidKeys {
